@@ -35,7 +35,7 @@ def sample_Z(D,max_S):
 
 
 class pref_shap():
-    def __init__(self,alpha,k,X_l,X_r,X,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-2,max_inv_row=0,cg_bs=20,device='cuda:0'):
+    def __init__(self,alpha,k,X_l,X_r,X,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,device='cuda:0'):
         if max_inv_row >0:
             X = X[:max_inv_row,:]
 
@@ -143,11 +143,19 @@ class pref_shap():
 
     def value_observation(self,S_batch,x,x_prime):
         output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
-        output = (self.alpha@output).squeeze(-1)
+        output = (self.alpha@output).squeeze()
         if first_flag:
-            output = torch.cat([torch.ones(1,output.shape[1]).to(self.device) ,output],dim=0)
+            if len(output.shape)==1:
+                o=torch.ones(1).to(self.device)
+            else:
+                o=torch.ones(1, output.shape[1]).to(self.device)
+            output = torch.cat([ o,output],dim=0)
         if last_flag:
-            output = torch.cat([output,torch.ones(1,output.shape[1]).to(self.device)],dim=0)
+            if len(output.shape)==1:
+                o=torch.ones(1).to(self.device)
+            else:
+                o=torch.ones(1, output.shape[1]).to(self.device)
+            output = torch.cat([output,o],dim=0)
 
         return output
 
@@ -168,7 +176,11 @@ class pref_shap():
         Y_target = []
         for batch in tqdm(self.batched_Z):
             Y_target.append(self.value_observation(batch,x,x_prime))
-        Y_target =self.weights* torch.cat(Y_target,dim=0)
+        Y_cat = torch.cat(Y_target, dim=0)
+        if len(Y_cat.shape) == 1:
+            Y_target = self.weights.squeeze() * Y_cat
+        else:
+            Y_target = self.weights* Y_cat
         return self.zwz@(self.Z.t()@Y_target)
 
 

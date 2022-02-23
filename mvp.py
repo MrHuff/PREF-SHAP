@@ -18,7 +18,8 @@ if __name__ == '__main__':
     b = torch.unique(x_prime,dim=0)
     X = torch.cat([a,b],dim=0)
     ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x,X_r=x_prime,X=X,max_S=2500,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-2,max_inv_row=0,cg_bs=20,device='cuda:0')
-    output = ps.fit(x[0,:].unsqueeze(0),x_prime[0,:].unsqueeze(0))
+    num_features = 4
+    output = ps.fit(x[0:num_features,:],x_prime[0:num_features,:])
     print(output)
 
     # print(alpha)
