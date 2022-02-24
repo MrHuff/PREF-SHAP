@@ -68,19 +68,6 @@ class pref_shap():
         ztw = self.Z * self.weights
         self.zwz=torch.inverse(ztw.t()@self.Z)
 
-    # def get_coalition_list(self, S_list_batch: list=[]):
-    #     data_list_l=[]
-    #     data_list_r=[]
-    #     data_list=[]
-    #     data_list_C=[]
-    #
-    #     for el in S_list_batch:
-    #         data_list_l.append(self.X_l[:,el])
-    #         data_list_r.append(self.X_r[:,el])
-    #         data_list.append(self.X[:,el])
-    #         data_list_C.append(self.X[:,~el])
-    #     return data_list_l,data_list_r,data_list,data_list_C
-
 
     def kernel_tensor_batch(self,S_list_batch,x,x_prime):
         inv_tens=[]
@@ -101,17 +88,17 @@ class pref_shap():
             elif S_C.sum()==0:
                 last_flag=True
             else:
-                inv_tens.append(self.k(self.X[:,S]))
+                inv_tens.append(self.k(self.X[:,S],None,S))
                 x_S,x_prime_S= x[:,S],x_prime[:,S]
                 xs_cat = torch.cat([x_S,x_prime_S],dim=0)
-                vec_cat  = self.k(self.X[:,S], xs_cat)
+                vec_cat  = self.k(self.X[:,S], xs_cat,S)
                 vec.append(vec_cat)
                 stacked_lr = torch.cat([self.X_l[:,S],self.X_r[:,S]],dim=0)
-                l_hadamard_mat = self.k(stacked_lr,xs_cat)
+                l_hadamard_mat = self.k(stacked_lr,xs_cat,S)
                 r,c = l_hadamard_mat.shape
                 xls_xs,xls_xs_prime,xrs_xs,xrs_xs_prime, = l_hadamard_mat[:r//2,:][:,:c//2],l_hadamard_mat[:r//2,:][:,c//2:],l_hadamard_mat[r//2:,:][:,:c//2],l_hadamard_mat[r//2:,:][:,c//2:]
-                klsc_xsc = self.k( self.X_l[:,S_C],self.X[:,S_C])
-                krsc_xsc = self.k( self.X_r[:,S_C],self.X[:,S_C])
+                klsc_xsc = self.k( self.X_l[:,S_C],self.X[:,S_C],S_C)
+                krsc_xsc = self.k( self.X_r[:,S_C],self.X[:,S_C],S_C)
                 cat_xls_xs.append(xls_xs)
                 cat_xls_xs_prime.append(xls_xs_prime)
                 cat_xrs_xs.append(xrs_xs)

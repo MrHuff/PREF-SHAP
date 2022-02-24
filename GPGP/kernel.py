@@ -66,6 +66,34 @@ class RBFKernel(Kernel):
 
     def __matmul__(self, other):
         return self.evaluate()@other
+    
+class RBF_multiple_ls(RBFKernel):
+    def __init__(self,d=10):
+        super(RBF_multiple_ls, self).__init__()
+        self.ls =torch.ones(d)
+        self.d=d
+
+    def _set_lengthscale(self,ls):
+        if torch.numel(ls)==1:
+            self.ls = ls*torch.ones(self.d)
+        assert torch.numel(ls)==self.d
+        self.ls=ls
+
+    def evaluate(self):
+        if self.x2 is None:
+            return torch.exp(-0.5*self.sq_dist(self.x1/self.ls,self.x1/self.ls))
+        else:
+            return torch.exp(-0.5*self.sq_dist(self.x1/self.ls,self.x2/self.ls))
+
+    def forward(self,x1=None,x2=None,mask=None):
+        if mask is not None:
+            ls=self.ls[mask]
+        else:
+            ls=self.ls
+        if x2 is None:
+            return torch.exp(-0.5*self.sq_dist(x1/ls,x1/ls))
+        else:
+            return torch.exp(-0.5*self.sq_dist(x1/ls,x2/ls))
 
 class LinearKernel(Kernel):
     def __init__(self,x1=None,x2=None):
@@ -100,13 +128,12 @@ class GPGP_kernel(Kernel):
     def __init__(self, u,u_prime,base_ker='rbf'):
         super(GPGP_kernel, self).__init__()
         for name,el in zip(['u','u_prime'],[u,u_prime]):
-            setattr(self,name,el)
+            self.register_buffer(name,el)
         if base_ker=='rbf':
-            data = torch.cat([u,u_prime],dim=0)
-            ls = self.get_median_ls(data)
-            self.kernel = RBFKernel()
-            self.kernel._set_lengthscale(ls)
+            self.kernel = RBF_multiple_ls(d=u.shape[1])
 
+    def set_ls(self,ls):
+        self.kernel._set_lengthscale(ls)
 
     def eval_kernel(self,a,b,c,d): #base expression
         return self.kernel(a,c)*self.kernel(b,d)-self.kernel(a,d)*self.kernel(b,c)
