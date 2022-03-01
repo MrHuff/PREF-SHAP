@@ -13,5 +13,8 @@ class base_KRR:
         self.alpha = torch.inverse(self.K+self.eye)@self.y
         return self.alpha
 
-
+    def predict(self,y):
+        y_hat = self.K@self.alpha
+        R_2 = 1-(torch.mean((y_hat-y)**2)/y.var()).item()
+        return y_hat,R_2
 

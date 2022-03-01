@@ -109,6 +109,11 @@ class pref_shap():
         vec = torch.stack(vec,dim=0)
 
         cg_output = self.tensor_CG.solve(inv_tens,vec) #BS x N x D
+        #Write assertion error
+
+        if torch.isnan(cg_output).any():
+            cg_output=torch.nan_to_num(cg_output, nan=0.0)
+
         cat_klsc_xsc = torch.stack(cat_klsc_xsc,dim=0)
         cat_krsc_xsc = torch.stack(cat_krsc_xsc,dim=0)
 
@@ -131,6 +136,7 @@ class pref_shap():
     def value_observation(self,S_batch,x,x_prime):
         output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
         output = (self.alpha@output).squeeze()
+
         if first_flag:
             if len(output.shape)==1:
                 o=torch.ones(1).to(self.device)
