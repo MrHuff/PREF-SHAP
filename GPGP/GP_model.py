@@ -12,7 +12,7 @@ class GPGPModel(ApproximateGP):
         self.covar_module = gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel())
 
     def forward(self, x):
-        u, u_prime, v, v_prime=x
+        u, u_prime, v, v_prime = x
         mean_x = self.mean_module(x)
         covar_x = self.covar_module(u,v)*self.covar_module(u_prime,v_prime)-self.covar_module(u,v_prime)*self.covar_module(u_prime,v)
         return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
