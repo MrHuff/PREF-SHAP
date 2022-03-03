@@ -9,6 +9,7 @@ if __name__ == '__main__':
     if not os.path.exists(job_name):
         os.makedirs(job_name)
     u,u_prime = generate_mvp_X(n,d=d)
-    y =GPGP_mvp_krr(u,u_prime)
+    fixed_ls=torch.tensor([1.,1.]+[1.]*(d-2)).float()
+    y =GPGP_mvp_krr(u,u_prime,fixed_ls)
     with  open(f'{job_name}/toy_mvp_{n}_{d}.pickle', 'wb') as handle:
         pickle.dump({ 'X':u,'X_prime':u_prime,'Y':y}, handle, protocol=pickle.HIGHEST_PROTOCOL)
