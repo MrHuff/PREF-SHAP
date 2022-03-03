@@ -8,7 +8,7 @@ def generate_x(n_pairs, n_samples, d=10, num_latent_states=3):
         raise ValueError("Due to experimental design, # of states has to be < d.")
 
     X = torch.randn(n_samples, d)
-    latent_state_ls = np.random.choice(range(num_latent_states),
+    latent_state_ls = np.random.choice([0,4],
                                     replace=True,
                                     size=n_samples
                                     )
@@ -17,7 +17,7 @@ def generate_x(n_pairs, n_samples, d=10, num_latent_states=3):
     # if items are from cluster 1 and 2, then the linear preference will have
     # linear weights 1 on feature 1 and 2.
 
-    linear_weights = torch.zeros(size=(10, 1))
+    linear_weights = torch.zeros(size=(num_latent_states, 1))
 
     # Generate match indicies
     match_indicies = []
@@ -35,19 +35,25 @@ def generate_x(n_pairs, n_samples, d=10, num_latent_states=3):
     y_ls = []
 
     # now generate matches
+    state_vector = []
+    # print(len(latent_state_ls))
+
     for i, match in enumerate(match_indicies):
         state_a, state_b = latent_state_ls[match[0]], latent_state_ls[match[1]]
         weights = linear_weights
         weights[state_a], weights[state_b] = 1, 1
 
         difference = x_left[i, :]@weights - x_right[i, :]@weights
+        # print(difference)
+        # print(state_a,state_b)
         if difference > 0:
             # left wins
             y_ls.append(1)
         else:
-            y_ls.append(0)
+            y_ls.append(-1)
+        state_vector.append([state_a,state_b])
 
-    return x_left.float(), x_right.float(), torch.tensor(y_ls).float()
+    return x_left.float(), x_right.float(), torch.tensor(y_ls).float().unsqueeze(-1), np.array(state_vector)
 
 
 
