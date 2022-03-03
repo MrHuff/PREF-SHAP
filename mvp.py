@@ -11,12 +11,11 @@ sns.set()
 
 if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    n=1000
-    d=5
+    n=2500
+    d=10
     data = load_data('alan_data',f'toy_mvp_{n}_{d}.pickle')
     x,x_prime,y,state = data['X'],data['X_prime'],data['Y'],data['state']
-    
-    
+    palette = ['g']*d
     k=GPGP_kernel(x,u_prime=x_prime).to(device)
     fixed_ls = torch.tensor([1.,1.] + [1.] * (d - 2)).float().cuda()
     k.set_ls(fixed_ls)
@@ -33,7 +32,7 @@ if __name__ == '__main__':
     X = torch.cat([a,b],dim=0)
 
     inner_kernel = k.kernel
-    ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x,X_r=x_prime,X=X,max_S=2500,rff_mode=False,eps=1e-6,cg_max_its=10,lamb=1e-2,max_inv_row=0,cg_bs=20,device='cuda:0')
+    ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x,X_r=x_prime,X=X,max_S=2500,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,device='cuda:0')
     num_features = 500
     print(state[0:num_features,:])
 
@@ -49,11 +48,12 @@ if __name__ == '__main__':
     # print(output.shape)
     # penguins = sns.load_dataset("penguins")
     # print(penguins.head())
+    palette[0]='r'
+    palette[1]='r'
+    plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'],)
 
-    plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'])
 
-
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
+    sns.displot(plot,x="shapley_vals", hue="d", kind="kde",palette=palette)
     # plt.ylim(0,0.05 )
     plt.show()
 
@@ -61,8 +61,9 @@ if __name__ == '__main__':
     plot =  pd.DataFrame(np.abs(np.stack([tst,tmp],axis=1)),columns=['d','shapley_vals'])
 
 
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
+    sns.displot(plot,x="shapley_vals", hue="d", kind="kde",palette=palette)
     # plt.ylim(0,0.05 )
+
     plt.show()
 
     # print(output.abs().median(1))

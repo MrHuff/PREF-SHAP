@@ -7,8 +7,8 @@ def generate_x(n_pairs, n_samples, d=10, num_latent_states=3):
     if num_latent_states > d:
         raise ValueError("Due to experimental design, # of states has to be < d.")
 
-    X = torch.randn(n_samples, d)
-    latent_state_ls = np.random.choice([0,4],
+    X = torch.randn(n_samples, d)*0.1
+    latent_state_ls = np.random.choice([0,1],
                                     replace=True,
                                     size=n_samples
                                     )
@@ -46,11 +46,12 @@ def generate_x(n_pairs, n_samples, d=10, num_latent_states=3):
         difference = x_left[i, :]@weights - x_right[i, :]@weights
         # print(difference)
         # print(state_a,state_b)
-        if difference > 0:
-            # left wins
-            y_ls.append(1)
-        else:
-            y_ls.append(-1)
+        y_ls.append(difference.item())
+        # if difference > 0:
+        #     left wins
+            # y_ls.append(1)
+        # else:
+        #     y_ls.append(-1)
         state_vector.append([state_a,state_b])
 
     return x_left.float(), x_right.float(), torch.tensor(y_ls).float().unsqueeze(-1), np.array(state_vector)

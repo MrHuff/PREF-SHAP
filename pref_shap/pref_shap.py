@@ -37,7 +37,7 @@ def sample_Z(D,max_S):
 class pref_shap():
     def __init__(self,alpha,k,X_l,X_r,X,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,device='cuda:0'):
         if max_inv_row >0:
-            X = X[:max_inv_row,:]
+            X = X[torch.randperm(X.shape[0])[:max_inv_row],:]
 
         self.alpha = alpha.t()
         self.cg_bs=cg_bs
@@ -139,17 +139,22 @@ class pref_shap():
 
         if first_flag:
             if len(output.shape)==1:
-                o=torch.ones(1).to(self.device)
+                o=torch.ones_like(output)
+                output = torch.stack([ o,output],dim=0)
+
             else:
-                o=torch.ones(1, output.shape[1]).to(self.device)
-            output = torch.cat([ o,output],dim=0)
+                o=torch.ones_like(output[0,:]).unsqueeze(0)
+                output = torch.cat([ o,output],dim=0)
         if last_flag:
             if len(output.shape)==1:
-                o=torch.ones(1).to(self.device)
+                o=torch.ones_like(output)
+                output = torch.stack([output, o], dim=0)
             else:
-                o=torch.ones(1, output.shape[1]).to(self.device)
-            output = torch.cat([output,o],dim=0)
+                o=torch.ones_like(output[0,:]).unsqueeze(0)
+                output = torch.cat([output, o], dim=0)
 
+        # if len(output.shape) == 1:
+        #     output = output.unsqueeze(0)
         return output
 
     def fit(self,x,x_prime ):
