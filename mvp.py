@@ -13,11 +13,13 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     n=2500
     d=10
-    data = load_data('alan_data',f'toy_mvp_{n}_{d}.pickle')
-    x,x_prime,y,state = data['X'],data['X_prime'],data['Y'],data['state']
-    palette = ['g']*d
+    d_imp=2
+    data = load_data('toy_data',f'toy_mvp_{n}_{d}.pickle')
+    # x,x_prime,y,state = data['X'],data['X_prime'],data['Y'],data['state']
+    x,x_prime,y,state = data['X'],data['X_prime'],data['Y'],0
+    palette =['r']*d_imp+ ['g']*(d-d_imp)
     k=GPGP_kernel(x,u_prime=x_prime).to(device)
-    fixed_ls = torch.tensor([1.,1.] + [1.] * (d - 2)).float().cuda()
+    fixed_ls=torch.tensor([1.]*d_imp+[1.]*(d-d_imp)).float().to(device)
     k.set_ls(fixed_ls)
     K=k.evaluate()
     
@@ -34,7 +36,7 @@ if __name__ == '__main__':
     inner_kernel = k.kernel
     ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x,X_r=x_prime,X=X,max_S=2500,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,device='cuda:0')
     num_features = 500
-    print(state[0:num_features,:])
+    # print(state[0:num_features,:])
 
 
     output = ps.fit(x[0:num_features,:],x_prime[0:num_features,:])
@@ -48,8 +50,7 @@ if __name__ == '__main__':
     # print(output.shape)
     # penguins = sns.load_dataset("penguins")
     # print(penguins.head())
-    palette[0]='r'
-    palette[1]='r'
+
     plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'],)
 
 

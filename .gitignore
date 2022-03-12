@@ -3,10 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pickle
+*.npy
 # C extensions
 *.so
 *.idea
 *.png
+*.csv
+*.parquet
+*.txt
+*.ods
 # Distribution / packaging
 .Python
 build/

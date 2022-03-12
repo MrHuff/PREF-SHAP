@@ -3,14 +3,14 @@ import torch
 
 from GPGP.kernel import *
 
-def generate_mvp_X(n_pairs,d=10,cluster_a_n=100,cluster_b_n=100):
-    important_feature_a = torch.randn(cluster_a_n,5)*0.2
-    important_feature_b = torch.randn(cluster_b_n,5)*0.2
+def generate_mvp_X(n_pairs,d=10,cluster_a_n=100,cluster_b_n=100,d_imp=2):
+    important_feature_a = torch.randn(cluster_a_n,d_imp)*0.2
+    important_feature_b = torch.randn(cluster_b_n,d_imp)*0.2
 
     #Try doing IID and lengthscaling properly if it doesn't work
 
-    unimportant_feature_a = torch.ones(cluster_a_n,d-5)
-    unimportant_feature_b = torch.ones(cluster_b_n,d-5)
+    unimportant_feature_a = torch.ones(cluster_a_n,d-d_imp)
+    unimportant_feature_b = torch.ones(cluster_b_n,d-d_imp)
 
     items_A = torch.cat([important_feature_a,unimportant_feature_a],dim=1)
     items_B = torch.cat([important_feature_b,unimportant_feature_b],dim=1)
