@@ -33,7 +33,7 @@ def extract_winners(losers,winners):
             if c==0: #winner goes left
                 left.append(w)
                 right.append(l)
-                y.append(0)
+                y.append(-1)
             else: #winner goes right
                 left.append(l)
                 right.append(w)
@@ -45,7 +45,6 @@ def extract_winners(losers,winners):
 def duelling_data(df):
     sess_id = df['uniquesessionid'].tolist()
     clicks = df['click'].tolist()
-    list_of_alist = []
     init_list_losers = []
     init_list_winners = []
     big_Y=[]
@@ -78,28 +77,38 @@ def duelling_data(df):
 if __name__ == '__main__':
     df = pd.read_parquet('pref_3.parquet')
     df = df.sort_values(by=['bpid', 'uniquesessionid'])
-
+    df = pd.get_dummies(df,columns=categorical_cols)
     if not os.path.exists('website_data'):
         os.makedirs('website_data')
 
     if not os.path.exists('website_data/left.csv'):
         l, r, y = duelling_data(df)
+        l=l.drop(['bpid',
+                  'article_id',
+        'uniquesessionid',
+        'trans_date',
+        'click',
+        'view',],axis=1)
+        r=r.drop(['bpid',
+                  'article_id',
+                  'uniquesessionid',
+        'trans_date',
+        'click',
+        'view',],axis=1)
+
         l.to_csv('website_data/left.csv')
         r.to_csv('website_data/right.csv')
-        y.to_csv('website_data/y.csv')
-
-
+        with open('website_data/y.npy', 'wb') as f:
+            np.save(f, y.values)
 
     if not os.path.exists('website_data/left_processed.npy'):
         l= pd.read_csv('website_data/left.csv',index_col=0)
         r= pd.read_csv('website_data/right.csv',index_col=0)
-        l_processed=pd.get_dummies(l[categorical_cols]).values
-        r_processed=pd.get_dummies(r[categorical_cols]).values
         with open('website_data/l_processed.npy', 'wb') as f:
-            np.save(f, l_processed)
+            np.save(f, l)
         with open('website_data/r_processed.npy', 'wb') as f:
-            np.save(f, r_processed)
-
+            np.save(f, r)
+        df = pd.read_parquet('pref_3.parquet')
         S = df.drop_duplicates(subset=['article_id'])
         S = pd.get_dummies(S[categorical_cols]).values
         with open('website_data/S.npy', 'wb') as f:
