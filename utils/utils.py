@@ -1,3 +1,4 @@
+import os.path
 import pickle
 
 import torch
@@ -9,6 +10,46 @@ from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 import tqdm
+from GPGP.KRR_model import train_KRR
+
+
+def sq_dist( x1, x2):
+    adjustment = x1.mean(-2, keepdim=True)
+    x1 = x1 - adjustment
+    x2 = x2 - adjustment  # x1 and x2 should be identical in all dims except -2 at this point
+
+    # Compute squared distance matrix using quadratic expansion
+    x1_norm = x1.pow(2).sum(dim=-1, keepdim=True)
+    x1_pad = torch.ones_like(x1_norm)
+    x2_norm = x2.pow(2).sum(dim=-1, keepdim=True)
+    x2_pad = torch.ones_like(x2_norm)
+    x1_ = torch.cat([-2.0 * x1, x1_norm, x1_pad], dim=-1)
+    x2_ = torch.cat([x2, x2_pad, x2_norm], dim=-1)
+    res = x1_.matmul(x2_.transpose(-2, -1))
+    # Zero out negative values
+    res.clamp_min_(0)
+
+    # res  = torch.cdist(x1,x2,p=2)
+    # Zero out negative values
+    # res.clamp_min_(0)
+    return res
+
+
+def covar_dist( x1, x2):
+    return sq_dist(x1, x2).sqrt()
+
+
+def get_median_ls(X, Y=None):
+    with torch.no_grad():
+        if Y is None:
+            d = covar_dist(x1=X, x2=X)
+        else:
+            d = covar_dist(x1=X, x2=Y)
+        ret = torch.sqrt(torch.median(d[d >= 0]))  # print this value, should be increasing with d
+        if ret.item() == 0:
+            ret = torch.tensor(1.0)
+        return ret
+
 class general_chunk_iterator():
     def __init__(self,X,y,shuffle,batch_size):
         self.X = X
@@ -105,27 +146,37 @@ class train_GP():
         self.patience=train_params['patience']
         self.model_string = train_params['model_string']
         self.bs = train_params['bs']
+        self.save_dir = f'{self.dataset_string}_results/{self.model_string}/'
+
         self.m=m
         self.load_and_split_data()
         self.init_model()
 
     def init_model(self):
-        inducing_points = self.dataset.train_X[torch.randperm(self.dataset.train_X.shape[0])[:self.m], :]
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+
+        inducing_points = self.dataset.train_X[torch.randperm(self.dataset.train_X.shape[0])[:self.m], :].to(self.device)
         if self.model_string=='GPGP_exact':
-            self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
+            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
             self.model = ExactGPGP(likelihood=self.likelihood,train_x=self.dataset.train_X,train_y=self.dataset.train_y)
         if self.model_string=='GPGP_approx':
             self.model = ApproximateGPGP(inducing_points=inducing_points,dim=inducing_points.shape[1])
+            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
+        if self.model_string=='krr_GPGP':
+            self.model = train_KRR
+
         if self.model_string=='PGP_exact':
             pass
         if self.model_string=='PGP_approx':
-            pass
+            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
+
         if self.model_string=='vanilla_exact':
-            self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
+            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
             self.model = ExactVanilla(likelihood=self.likelihood,train_x=self.dataset.train_X,train_y=self.dataset.train_y)
         if self.model_string=='vanilla_approx':
             self.model = ApproximateVanilla(inducing_points=inducing_points,dim=inducing_points.shape[1])
-        self.model=self.model.to(self.device)
+
 
     def load_and_split_data(self):
         l=np.load(self.dataset_string+'/l_processed.npy')
@@ -137,15 +188,15 @@ class train_GP():
         self.left_tr,self.right_tr = l[tr_ind],r[tr_ind]
         self.left_val,self.right_val = l[val_ind],r[val_ind]
         self.left_test,self.right_test = l[test_ind],r[test_ind]
-        y_tr = y[tr_ind]
-        y_val = y[val_ind]
-        y_test = y[test_ind]
+        self.y_tr = y[tr_ind]
+        self.y_val = y[val_ind]
+        self.y_test = y[test_ind]
 
-        X_tr = np.concatenate([self.left_tr,self.right_tr],axis=1)
-        X_val = np.concatenate([self.left_val,self.right_val],axis=1)
-        X_test = np.concatenate([self.left_test,self.right_test],axis=1)
+        self.X_tr = np.concatenate([self.left_tr,self.right_tr],axis=1)
+        self.X_val = np.concatenate([self.left_val,self.right_val],axis=1)
+        self.X_test = np.concatenate([self.left_test,self.right_test],axis=1)
 
-        self.dataset=general_dataset(X_tr=X_tr,y_tr=y_tr,X_val=X_val,y_val=y_val,X_test=X_test,y_test=y_test)
+        self.dataset=general_dataset(X_tr=self.X_tr,y_tr=self.y_tr,X_val=self.X_val,y_val=self.y_val,X_test=self.X_test,y_test=self.y_test)
         self.dataset.set('train')
         self.dataloader= custom_dataloader(self.dataset,batch_size=self.bs)
 
@@ -163,9 +214,33 @@ class train_GP():
         loss.backward()
         optimizer.step()
         return loss.item(),self.model.covar_module.base_kernel.lengthscale.item(),self.model.likelihood.noise.item()
-        # print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
-        #     i + 1, self.training_iter,
-        # ))
+
+    def full_krr_loop(self):
+        lambdas =np.linspace(1e-5,1,25)
+        factors =np.linspace(0.1,2,25)
+        train_X=self.dataloader.dataset.train_X
+        train_y=self.dataloader.dataset.train_y
+        val_X=self.dataloader.dataset.val_X
+        val_y=self.dataloader.dataset.val_y
+        test_X=self.dataloader.dataset.test_X
+        test_y=self.dataloader.dataset.test_y
+        base_ls  = get_median_ls(train_X)
+
+        val_scores = []
+        test_scores = []
+        params=[]
+        for l in lambdas:
+            for f in factors:
+                model,val_score,test_score = self.model(train_X,train_y,val_X,val_y,test_X,test_y,base_ls*f,l)
+                val_scores.append(val_score)
+                test_scores.append(test_score)
+                params.append([base_ls*f,l])
+        best_ind=np.argmax(test_scores)
+        best_test=test_scores[best_ind]
+        best_val=val_scores[best_ind]
+        best_params=params[best_ind]
+        results = {'test_auc':best_test ,'val_auc':best_val,'ls':best_params[0],'lamb':best_params[1]}
+        return results
 
     def full_approx_loop(self,optimizer,mll):
         self.model.train()
@@ -173,31 +248,44 @@ class train_GP():
         self.dataloader.dataset.set('train')
         pbar = tqdm.tqdm(self.dataloader)
         for i, (x_batch, y_batch) in enumerate(pbar):
+            x_batch = x_batch.to(self.device)
+            y_batch = y_batch.to(self.device)
             optimizer.zero_grad()
             output= self.model(x_batch)
             loss = -mll(output, y_batch)
             loss.backward()
             optimizer.step()
+
     def train_model(self):
 
         if self.model_string in ['GPGP_exact','PGP_exact','vanilla_exact']:
+            self.model = self.model.to(self.device)
             optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
             mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
             pbar = tqdm.tqdm(range(self.epochs))
             for i,j in enumerate(pbar):
                 l,ls,noise=self.full_gp_loop(optimizer,mll)
                 pbar.set_description(f"loss: {l} ls: {ls} noise: {noise}")
-        else:
+
+        if self.model_string in ['PGP_approx','GPGP_approx','vanilla_approx']:
+            self.model = self.model.to(self.device)
             optimizer = torch.optim.Adam([
                 {'params': self.model.parameters()},
                 {'params': self.likelihood.parameters()},
             ], lr=0.01)
 
             # Our loss object. We're using the VariationalELBO
-            mll = gpytorch.mlls.VariationalELBO(self.likelihood, self.model, num_data=self.dataset.train_y.size[0])
+            mll = gpytorch.mlls.VariationalELBO(self.likelihood, self.model, num_data=self.dataset.train_y.size(0))
             pbar = tqdm.tqdm(range(self.epochs))
             for i,j in enumerate(pbar):
                 self.full_approx_loop(optimizer,mll)
+
+        if self.model_string in ['krr_GPGP']:
+            results = self.full_krr_loop()
+            with open(self.save_dir + f'run_{self.fold}.pickle', 'rb') as handle:
+                pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 
     def validate_model(self,mode='val'):
         if 'exact' in self.model_string:

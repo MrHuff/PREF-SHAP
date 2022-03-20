@@ -9,6 +9,21 @@ import os
 # 'click',
 # 'view',
 
+categorical_cols_old=[
+                   'is_seasonless',
+                   'is_carried_over',
+                   'is_running_item',
+                   'product_type_name',
+                   'product_group_name',
+                   'graphical_appearance_name',
+                   'colour_name',
+                    'assortment_mix_name',
+                   'licence_company_name',
+                   'section_name',
+                   'composition',
+                   'garment_group_name',
+                   ]
+
 categorical_cols=[
                    'is_seasonless',
                    'is_carried_over',
@@ -23,6 +38,8 @@ categorical_cols=[
                    'composition',
                    'garment_group_name',
                    ]
+
+
 
 def extract_winners(losers,winners):
     left,right=[],[]
@@ -88,13 +105,32 @@ if __name__ == '__main__':
         'uniquesessionid',
         'trans_date',
         'click',
-        'view',],axis=1)
+        'view',
+      #     'is_seasonless',
+      #     'is_carried_over',
+      #     'is_running_item',
+      # 'product_group_name',
+      #         'licence_company_name',
+      #         'section_name',
+      #             'product_group_name',
+      #             'product_type_name',
+                  ],axis=1)
         r=r.drop(['bpid',
                   'article_id',
                   'uniquesessionid',
         'trans_date',
         'click',
-        'view',],axis=1)
+        'view',
+                  # 'is_seasonless',
+                  # 'is_carried_over',
+                  # 'is_running_item',
+                  # 'product_group_name',
+                  # 'licence_company_name',
+                  # 'section_name',
+                  # 'product_group_name',
+                  # 'product_type_name',
+
+                  ],axis=1)
 
         l.to_csv('website_data/left.csv')
         r.to_csv('website_data/right.csv')
