@@ -62,10 +62,11 @@ def learn_with_kernel(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,kernel,pen=1e-5):
     print("Test r2: %.2f" % (ts_err))
     return model,val_err,ts_err
 
-def train_KRR(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5):
-    lengthscale_init = torch.tensor([ls]*(Xtrain.shape[1]//2)).requires_grad_(False)
-    kernel = diffrentiable_FALKON_GPGP(lengthscale_init, options=falkon.FalkonOptions())
+def train_vanilla_KRR(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5):
+    lengthscale_init = torch.tensor([ls]*(Xtrain.shape[1])).requires_grad_(False)
+    kernel = falkon.kernels.GaussianKernel(lengthscale_init)
     M = int(round(Xtrain.shape[0] ** 0.5))
+    print(M)
     flk_opt = FalkonOptions(use_cpu=False)
     model = falkon.Falkon(
         kernel=kernel, penalty=pen, M=M, options=flk_opt,
@@ -77,6 +78,37 @@ def train_KRR(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5):
     print("Test auc: %.2f" % (ts_err))
     return model, val_err, ts_err
 
+def train_KRR(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5):
+    lengthscale_init = torch.tensor([ls]*(Xtrain.shape[1]//2)).requires_grad_(False)
+    kernel = diffrentiable_FALKON_GPGP(lengthscale_init, options=falkon.FalkonOptions())
+    M = int(round(Xtrain.shape[0] ** 0.5))
+    print(M)
+    flk_opt = FalkonOptions(use_cpu=False)
+    model = falkon.Falkon(
+        kernel=kernel, penalty=pen, M=M, options=flk_opt,
+        error_every=1, error_fn=rmse)
+    model.fit(Xtrain, Ytrain)
+    val_err = auc(Yval, model.predict(Xval))
+    ts_err = auc(Ytest, model.predict(Xtest))
+    print("Val auc: %.2f" % (val_err))
+    print("Test auc: %.2f" % (ts_err))
+    return model, val_err, ts_err
+
+def train_KRR_PGP(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5):
+    lengthscale_init = torch.tensor([ls]*(Xtrain.shape[1]//2)).requires_grad_(False)
+    kernel = diffrentiable_FALKON_PGP(lengthscale_init, options=falkon.FalkonOptions())
+    M = int(round(Xtrain.shape[0] ** 0.5))
+    print(M)
+    flk_opt = FalkonOptions(use_cpu=False)
+    model = falkon.Falkon(
+        kernel=kernel, penalty=pen, M=M, options=flk_opt,
+        error_every=1, error_fn=rmse)
+    model.fit(Xtrain, Ytrain)
+    val_err = auc(Yval, model.predict(Xval))
+    ts_err = auc(Ytest, model.predict(Xtest))
+    print("Val auc: %.2f" % (val_err))
+    print("Test auc: %.2f" % (ts_err))
+    return model, val_err, ts_err
 
 class diffrentiable_FALKON_GPGP(Kernel):
     def __init__(self, lengthscale, options):
@@ -142,8 +174,67 @@ class diffrentiable_FALKON_GPGP(Kernel):
 
 
 
-class diffrentiable_FALKON_PGP():
-    pass
+class diffrentiable_FALKON_PGP(Kernel):
+    def __init__(self, lengthscale, options):
+        # Super-class constructor call. We do not specify core_fn
+        # but we must specify the hyperparameter of this kernel (lengthscale)
+        super().__init__("diffrentiable_FALKON_GPGP", options)
+        self.lengthscale = lengthscale
+
+    def compute(self, X1: torch.Tensor, X2: torch.Tensor, out: torch.Tensor, diag: bool):
+        ls = self.lengthscale.to(device=X1.device, dtype=X1.dtype)
+        xa,xb = torch.chunk(X1,dim=1,chunks=2)
+        xc,xd = torch.chunk(X2,dim=1,chunks=2)
+        xa_ = xa.div(ls)
+        xb_ = xb.div(ls)
+        xc_ = xc.div(ls)
+        xd_ = xd.div(ls)
+        if diag:
+            xa_ = xa.unsqueeze(1)
+            xb_ = xb.unsqueeze(1)
+            xc_ = xc.unsqueeze(1)
+            xd_ = xd.unsqueeze(1)
+            K = (-pairwise_distances(xa_,xc_)/2).exp()+(-pairwise_distances(xb_,xd_)/2).exp()-(-pairwise_distances(xa_,xd_)/2).exp()-(-pairwise_distances(xb_,xc_)/2).exp()
+
+            out.copy_(K)
+        else:
+            K = (-pairwise_distances(xa_,xc_)/2).exp()+(-pairwise_distances(xb_,xd_)/2).exp()-(-pairwise_distances(xa_,xd_)/2).exp()-(-pairwise_distances(xb_,xc_)/2).exp()
+
+            out.copy_(K)
+        return out
+
+    def compute_diff(self, X1: torch.Tensor, X2: torch.Tensor, diag: bool):
+        # The implementation here is similar to `compute` without in-place operations.
+        ls = self.lengthscale.to(device=X1.device, dtype=X1.dtype)
+        xa,xb = torch.chunk(X1,dim=1,chunks=2)
+        xc,xd = torch.chunk(X2,dim=1,chunks=2)
+        xa_ = xa.div(ls)
+        xb_ = xb.div(ls)
+        xc_ = xc.div(ls)
+        xd_ = xd.div(ls)
+        if diag:
+            xa_ = xa.unsqueeze(1)
+            xb_ = xb.unsqueeze(1)
+            xc_ = xc.unsqueeze(1)
+            xd_ = xd.unsqueeze(1)
+            K = (-pairwise_distances(xa_,xc_)/2).exp()+(-pairwise_distances(xb_,xd_)/2).exp()-(-pairwise_distances(xa_,xd_)/2).exp()-(-pairwise_distances(xb_,xc_)/2).exp()
+
+            return K
+        K = (-pairwise_distances(xa_, xc_) / 2).exp() + (-pairwise_distances(xb_, xd_) / 2).exp() - (
+                    -pairwise_distances(xa_, xd_) / 2).exp() - (-pairwise_distances(xb_, xc_) / 2).exp()
+
+        return K
+
+    def detach(self):
+        # Clones the class with detached hyperparameters
+        return diffrentiable_FALKON_GPGP(
+            lengthscale=self.lengthscale.detach(),
+            options=self.params
+        )
+
+    def compute_sparse(self, X1, X2, out, diag, **kwargs) -> torch.Tensor:
+        raise NotImplementedError("Sparse not implemented")
+
 
 
 if __name__ == '__main__':

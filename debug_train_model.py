@@ -14,11 +14,11 @@ import os
 if __name__ == '__main__':
 
     train_params={
-        'dataset':'website_data',
+        'dataset':'nfl',
         'fold':0,
         'epochs':100,
         'patience':5,
-        'model_string':'krr_GPGP',
+        'model_string':'krr_vanilla',
         'bs':1000
     }
     c=train_GP(train_params=train_params,m=1000)

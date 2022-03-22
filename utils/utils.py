@@ -10,7 +10,7 @@ from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 import tqdm
-from GPGP.KRR_model import train_KRR
+from GPGP.KRR_model import train_KRR,train_KRR_PGP,train_vanilla_KRR
 
 
 def sq_dist( x1, x2):
@@ -147,7 +147,6 @@ class train_GP():
         self.model_string = train_params['model_string']
         self.bs = train_params['bs']
         self.save_dir = f'{self.dataset_string}_results/{self.model_string}/'
-
         self.m=m
         self.load_and_split_data()
         self.init_model()
@@ -165,7 +164,10 @@ class train_GP():
             self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
         if self.model_string=='krr_GPGP':
             self.model = train_KRR
-
+        if self.model_string=='krr_PGP':
+            self.model = train_KRR_PGP
+        if self.model_string=='krr_vanilla':
+            self.model = train_vanilla_KRR
         if self.model_string=='PGP_exact':
             pass
         if self.model_string=='PGP_approx':
@@ -217,7 +219,7 @@ class train_GP():
 
     def full_krr_loop(self):
         lambdas =np.linspace(1e-5,1,25)
-        factors =np.linspace(0.1,2,25)
+        factors =np.linspace(0.25,2,25)
         train_X=self.dataloader.dataset.train_X
         train_y=self.dataloader.dataset.train_y
         val_X=self.dataloader.dataset.val_X
@@ -229,17 +231,21 @@ class train_GP():
         val_scores = []
         test_scores = []
         params=[]
+        model_list = []
         for l in lambdas:
             for f in factors:
                 model,val_score,test_score = self.model(train_X,train_y,val_X,val_y,test_X,test_y,base_ls*f,l)
                 val_scores.append(val_score)
                 test_scores.append(test_score)
+                model_list.append(model)
                 params.append([base_ls*f,l])
         best_ind=np.argmax(test_scores)
         best_test=test_scores[best_ind]
         best_val=val_scores[best_ind]
         best_params=params[best_ind]
-        results = {'test_auc':best_test ,'val_auc':best_val,'ls':best_params[0],'lamb':best_params[1]}
+        best_model = model_list[best_ind]
+
+        results = {'test_auc':best_test ,'val_auc':best_val,'ls':best_params[0],'lamb':best_params[1],'model':best_model,'alpha':best_model.alpha_,'inducing_points':best_model.ny_points_}
         return results
 
     def full_approx_loop(self,optimizer,mll):
@@ -280,12 +286,12 @@ class train_GP():
             for i,j in enumerate(pbar):
                 self.full_approx_loop(optimizer,mll)
 
-        if self.model_string in ['krr_GPGP']:
+        if self.model_string in ['krr_GPGP','krr_PGP','krr_vanilla']:
             results = self.full_krr_loop()
-            with open(self.save_dir + f'run_{self.fold}.pickle', 'rb') as handle:
-                pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
+            print(results)
+            pickle.dump(results,
+                        open(self.save_dir + f'run_{self.fold}.pickle',
+                             "wb"))
 
     def validate_model(self,mode='val'):
         if 'exact' in self.model_string:
@@ -311,6 +317,7 @@ class train_GP():
                     preds = self.model(x_batch)
                     big_pred.append(preds.cpu())
             big_pred=torch.cat(big_pred,dim=0)
+
 
 
 

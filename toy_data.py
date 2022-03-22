@@ -3,9 +3,12 @@ from data_generation.data_generation import *
 import pickle
 import os
 
+
+#TODO rebuild this MVP pipeline... tailored for FALKON...
+
 if __name__ == '__main__':
     job_name = 'toy_data'
-    n=2500
+    n=5000
     d = 10
     d_imp=2
     if not os.path.exists(job_name):
