@@ -1,6 +1,7 @@
 from data_generation.data_generation_alan_method import *
 import pickle
 import os
+import numpy as np
 
 if __name__ == '__main__':
     job_name = 'alan_data'

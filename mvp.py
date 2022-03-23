@@ -67,7 +67,3 @@ if __name__ == '__main__':
 
     plt.show()
 
-    # print(output.abs().median(1))
-    # print(output.abs().mean(1))
-
-    # print(alpha)

@@ -46,7 +46,7 @@ class RBFKernel(Kernel):
         super(RBFKernel, self).__init__()
         self.x1 = x1
         self.x2 = x2
-        self.ls = 1.0
+        self.register_buffer('ls',torch.ones(1))
 
     def _set_lengthscale(self,ls):
         self.ls = ls
@@ -70,14 +70,15 @@ class RBFKernel(Kernel):
 class RBF_multiple_ls(RBFKernel):
     def __init__(self,d=10):
         super(RBF_multiple_ls, self).__init__()
-        self.ls =torch.ones(d)
+        self.register_buffer('ls',torch.ones(d))
         self.d=d
 
     def _set_lengthscale(self,ls):
         if torch.numel(ls)==1:
             self.ls = ls*torch.ones(self.d)
-        assert torch.numel(ls)==self.d
-        self.ls=ls
+        else:
+            assert torch.numel(ls)==self.d
+            self.ls=ls
 
     def evaluate(self):
         if self.x2 is None:
