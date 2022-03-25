@@ -7,11 +7,20 @@ import pandas as pd
 import matplotlib.pyplot as plt
 sns.set()
 
+def return_feature_names(job):
+    if job=='pokemon':
+        l1=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary',
+       'Bug', 'Dark', 'Dragon', 'Electric', 'Fairy', 'Fighting', 'Fire',
+       'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
+       'Psychic', 'Rock', 'Steel', 'Water']
+        l2=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary','Type']
+        return l2
+
 
 if __name__ == '__main__':
-    d_imp = 2
-    d=10
-    palette =['r']*d_imp+ ['g']*(d-d_imp)
+    # d_imp = 2
+    # d=10
+    # palette =['r']*d_imp+ ['g']*(d-d_imp)
     job='pokemon'
     model='krr_GPGP'
     fold=0
@@ -43,29 +52,21 @@ if __name__ == '__main__':
     num_features = 500
     output = ps.fit(x[0:num_features,:],x_prime[0:num_features,:])
 
-    print(output)
-    tmp = output.cpu().numpy().flatten()
-    tst= np.arange(1,d+1).repeat(num_features)
+    part_one = output[:7,:]
+    part_two = output[7:,:].sum(0,keepdim=True)
+    p_output = torch.cat([part_one,part_two],dim=0)
+    tmp = p_output.cpu().numpy().flatten()
+    features_names=return_feature_names(job)
+    tst= np.arange(1,len(features_names)+1).repeat(num_features)
 
 
 
-    # print(output.shape)
-    # penguins = sns.load_dataset("penguins")
-    # print(penguins.head())
-
-    plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'],)
-
-
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde",palette=palette)
-    # plt.ylim(0,0.05 )
+    plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'])
+    plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+    sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
     plt.show()
-
-
     plot =  pd.DataFrame(np.abs(np.stack([tst,tmp],axis=1)),columns=['d','shapley_vals'])
-
-
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde",palette=palette)
-    # plt.ylim(0,0.05 )
-
+    plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+    sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
     plt.show()
 

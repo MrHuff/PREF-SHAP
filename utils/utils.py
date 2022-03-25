@@ -184,7 +184,8 @@ class train_GP():
         l=np.load(self.dataset_string+'/l_processed.npy')
         r=np.load(self.dataset_string+'/r_processed.npy')
         y=np.load(self.dataset_string+'/y.npy')
-        self.S=torch.from_numpy(np.load(self.dataset_string+'/S.npy'))
+        print(l.shape)
+        self.S=torch.from_numpy(np.load(self.dataset_string+'/S.npy')).float()
         indices = np.arange(y.shape[0])
         tr_ind,val_ind,test_ind = StratifiedKFold3(5).split(indices,y)[self.fold]
         # test_set = np.concatenate([val_ind,test_ind],axis=0)
