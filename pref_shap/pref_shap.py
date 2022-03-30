@@ -2,7 +2,7 @@ import numpy as np
 from itertools import combinations
 import random
 import torch
-
+from sklearn.linear_model import Ridge, Lasso,ElasticNet
 from GPGP.kernel import *
 from tqdm import tqdm
 from scipy.special import binom
@@ -35,18 +35,20 @@ def sample_Z(D,max_S):
 
 
 class pref_shap():
-    def __init__(self,alpha,k,X_l,X_r,X,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,device='cuda:0'):
+    def __init__(self,alpha,k,X_l,X_r,X,U=None,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,post_method='OLS',interventional=False,device='cuda:0'):
         if max_inv_row >0:
             X = X[torch.randperm(X.shape[0])[:max_inv_row],:]
-
+        self.post_method=post_method
         self.alpha = alpha.t()
         self.cg_bs=cg_bs
         self.X_l,self.X_r,self.X= X_l.to(device),X_r.to(device),X.to(device)
+        self.U = U.to(device)
         self.N_x,self.m = self.X.shape
         self.reg = self.N_x*lamb
         self.device = device
         self.eye = torch.eye(self.N_x).to(device)*self.reg
         self.rff=rff_mode
+        self.interventional = interventional
         if self.rff:
             ls = k.ls
         else:
@@ -127,14 +129,97 @@ class pref_shap():
         cat_xls_xs_prime = torch.stack(cat_xls_xs_prime,dim=0)
         cat_xrs_xs = torch.stack(cat_xrs_xs,dim=0)
         cat_xrs_xs_prime = torch.stack(cat_xrs_xs_prime,dim=0)
-
-
         output = (cat_xls_xs*cat_xrs_xs_prime )* (cg_l_a * cg_r_a) - (cat_xls_xs_prime*cat_xrs_xs)*(cg_l_b*cg_r_b)
 
         return output,first_flag,last_flag
 
+    def kernel_tensor_batch_user_case_2(self,u, S_list_batch,x,x_prime):
+        output,first_flag,last_flag=self.kernel_tensor_batch(S_list_batch,x,x_prime)
+        user_k = self.k(self.U,u)
+        output = user_k*output
+        return output,first_flag,last_flag
+
+    def kernel_tensor_batch_interventional(self,S_list_batch,x,x_prime):
+        cat_xls_xs = []
+        cat_xls_xs_prime = []
+        cat_xrs_xs = []
+        cat_xrs_xs_prime = []
+        cat_klsc_xsc = []
+        cat_krsc_xsc = []
+        first_flag=False
+        last_flag=False
+        for i in range(S_list_batch.shape[0]):
+            S = S_list_batch[i,:].bool()
+            S_C = ~S
+            if S.sum()==0:
+                first_flag=True
+            elif S_C.sum()==0:
+                last_flag=True
+            else:
+                x_S,x_prime_S= x[:,S],x_prime[:,S]
+                xs_cat = torch.cat([x_S,x_prime_S],dim=0)
+                stacked_lr = torch.cat([self.X_l[:,S],self.X_r[:,S]],dim=0)
+                l_hadamard_mat = self.k(stacked_lr,xs_cat,S)
+                r,c = l_hadamard_mat.shape
+                xls_xs,xls_xs_prime,xrs_xs,xrs_xs_prime, = l_hadamard_mat[:r//2,:][:,:c//2],l_hadamard_mat[:r//2,:][:,c//2:],l_hadamard_mat[r//2:,:][:,:c//2],l_hadamard_mat[r//2:,:][:,c//2:]
+                cat_xls_xs.append(xls_xs)
+                cat_xls_xs_prime.append(xls_xs_prime)
+                cat_xrs_xs.append(xrs_xs)
+                cat_xrs_xs_prime.append(xrs_xs_prime)
+                klsc_xsc = self.k( self.X_l[:,S_C],self.X[:,S_C],S_C).mean(1,keepdim=True).expand(-1,c//2)
+                krsc_xsc = self.k( self.X_r[:,S_C],self.X[:,S_C],S_C).mean(1,keepdim=True).expand(-1,c//2)
+                cat_klsc_xsc.append(klsc_xsc)
+                cat_krsc_xsc.append(krsc_xsc)
+
+        cat_xls_xs = torch.stack(cat_xls_xs,dim=0)
+        cat_xls_xs_prime = torch.stack(cat_xls_xs_prime,dim=0)
+        cat_xrs_xs = torch.stack(cat_xrs_xs,dim=0)
+        cat_xrs_xs_prime = torch.stack(cat_xrs_xs_prime,dim=0)
+        cg_l_a=torch.stack(cat_klsc_xsc,dim=0)
+        cg_r_a=torch.stack(cat_krsc_xsc,dim=0)
+
+        output = (cat_xls_xs*cat_xrs_xs_prime )* (cg_l_a * cg_r_a) - (cat_xls_xs_prime*cat_xrs_xs)*(cg_l_a * cg_r_a)
+
+        return output,first_flag,last_flag
+
     def value_observation(self,S_batch,x,x_prime):
-        output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
+        if self.interventional:
+            output,first_flag,last_flag= self.kernel_tensor_batch_interventional(S_batch, x, x_prime)
+        else:
+            output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
+        output = (self.alpha@output).squeeze()
+
+        if first_flag:
+            if len(output.shape)==1:
+                o=torch.ones_like(output)
+                output = torch.stack([ o,output],dim=0)
+
+            else:
+                o=torch.ones_like(output[0,:]).unsqueeze(0)
+                output = torch.cat([ o,output],dim=0)
+        if last_flag:
+            if len(output.shape)==1:
+                o=torch.ones_like(output)
+                output = torch.stack([output, o], dim=0)
+            else:
+                o=torch.ones_like(output[0,:]).unsqueeze(0)
+                output = torch.cat([output, o], dim=0)
+
+        # if len(output.shape) == 1:
+        #     output = output.unsqueeze(0)
+        return output
+
+    def user_observation(self,S_batch,x,x_prime,u,case):
+
+        if case==1:
+            output, first_flag, last_flag =self.kernel_tensor_batch_user_case_1(u,S_batch,x,x_prime)
+        elif case==2:
+            output, first_flag, last_flag =self.kernel_tensor_batch_user_case_2(u,S_batch,x,x_prime)
+
+        # if self.interventional:
+        #     output,first_flag,last_flag= self.kernel_tensor_batch_interventional(S_batch, x, x_prime)
+        # else:
+        #     output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
         output = (self.alpha@output).squeeze()
 
         if first_flag:
@@ -179,7 +264,56 @@ class pref_shap():
             Y_target = self.weights.squeeze() * Y_cat
         else:
             Y_target = self.weights* Y_cat
-        return self.zwz@(self.Z.t()@Y_target)
+
+        self.Y_target=Y_target
+
+
+    def fit_user(self,u,x,x_prime,case=0):
+        """[Running the RKHS SHAP Algorithm to explain kernel ridge regression]
+        Args:
+            X_new (np.array): [New X data]
+            method (str, optional): [Interventional Shapley values (I) or Observational Shapley Values (O)]. Defaults to "O".
+            sample_method (str, optional): [What sampling methods to use for the permutations
+                                                if "MC" then you do sampling.
+                                                if None, you look at all potential 2**M permutation ]. Defaults to "MC".
+            num_samples (int, optional): [number of samples to use]. Defaults to None.
+            verbose (str, optional): [description]. Defaults to False.
+        """
+        x=x.to(self.device)
+        x_prime=x_prime.to(self.device)
+        u=u.to(self.device)
+        # Set up containers
+        Y_target = []
+        for batch in tqdm(self.batched_Z):
+            Y_target.append(self.value_observation(batch,x,x_prime))
+        Y_cat = torch.cat(Y_target, dim=0)
+        if len(Y_cat.shape) == 1:
+            Y_target = self.weights.squeeze() * Y_cat
+        else:
+            Y_target = self.weights* Y_cat
+        self.Y_target=Y_target
+
+    def construct_values(self,post_method=None):
+        if not post_method is None:
+            self.post_method=post_method
+        shap_dict={}
+        # if self.post_method=='OLS':
+        shap_dict['OLS']=self.zwz@(self.Z.t()@self.Y_target)
+            # return self.zwz@(self.Z.t()@Y_target)
+        coeffs=1e-11*np.cumprod([10]*7)
+        for coeff in coeffs:
+            if self.post_method == 'lasso':
+                clf = Lasso(coeff)
+            if self.post_method == 'ridge':
+                clf = Ridge(coeff)
+            if self.post_method == 'elastic':
+                clf = ElasticNet(coeff)
+            clf.fit(self.Z.cpu().numpy(), self.Y_target.cpu().numpy(), sample_weight=self.weights.cpu().numpy().squeeze())
+            vals = torch.from_numpy(clf.coef_.transpose())
+            shap_dict[coeff]=vals
+        return shap_dict
+
+
 
 
 

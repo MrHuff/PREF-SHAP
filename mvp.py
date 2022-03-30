@@ -36,7 +36,7 @@ if __name__ == '__main__':
     inner_kernel = k.kernel
     ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x,X_r=x_prime,X=X,max_S=2500,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,device='cuda:0')
     num_features = 500
-    # print(state[0:num_features,:])
+    # print(state[0:num_matches,:])
 
 
     output = ps.fit(x[0:num_features,:],x_prime[0:num_features,:])

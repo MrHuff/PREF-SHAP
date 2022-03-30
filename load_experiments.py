@@ -610,7 +610,7 @@ def reshape_data(full_choix_ls,predictors):
 
 if __name__ == '__main__':
 
-    for func,ds_name in zip([NFL,Pokemon,FlatLizard,Chameleon],['nfl','pokemon','flatlizard','chameleon']):
+    for func,ds_name in zip([FlatLizard,Chameleon,Pokemon],['flatlizard','chameleon','pokemon']):
         B_train, choix_ls, predictors = func()
         l,r,y=reshape_data(choix_ls,predictors)
         if not os.path.exists(f'{ds_name}'):
@@ -623,8 +623,6 @@ if __name__ == '__main__':
             np.save(f, predictors)
         with open(f'{ds_name}/y.npy', 'wb') as f:
             np.save(f, y)
-
-
 
 
     # print(B_train.shape)

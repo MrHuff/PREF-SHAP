@@ -31,6 +31,11 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.tex
+*.idata
+*.udata
+*.order
+*.score
 MANIFEST
 
 # PyInstaller

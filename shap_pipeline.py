@@ -9,18 +9,61 @@ sns.set()
 
 def return_feature_names(job):
     if job=='pokemon':
-        l1=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary',
-       'Bug', 'Dark', 'Dragon', 'Electric', 'Fairy', 'Fighting', 'Fire',
-       'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
-       'Psychic', 'Rock', 'Steel', 'Water']
+        l1= [1,1,1,1,1,1,1,19]
+        l1.insert(0,0)
+        l1=np.cumsum(l1).tolist()
+        # l1=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary',
+       # 'Bug', 'Dark', 'Dragon', 'Electric', 'Fairy', 'Fighting', 'Fire',
+       # 'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
+       # 'Psychic', 'Rock', 'Steel', 'Water']
         l2=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary','Type']
-        return l2
+        return l1,l2,True
+
+    if job=='website_data':
+        l1=[2, 2, 1, 287, 33, 29, 99, 5, 29, 68, 212, 23]
+        l1.insert(0,0)
+        l1=np.cumsum(l1).tolist()
+
+        l2= ['is_seasonless',
+                   'is_carried_over',
+                   'is_running_item',
+                   'product_type_name',
+                   'product_group_name',
+                   'graphical_appearance_name',
+                   'colour_name',
+                    'assortment_mix_name',
+                   'licence_company_name',
+                   'section_name',
+                   'composition',
+                   'garment_group_name',]
+        return l1,l2,True
+
+    if job == 'flatlizard':
+        l2 = ['throat.PC1', 'throat.PC2', 'throat.PC3', 'frontleg.PC1',
+       'frontleg.PC2', 'frontleg.PC3', 'badge.PC1', 'badge.PC2', 'badge.PC3',
+       'badge.size', 'testosterone', 'SVL', 'head.length', 'head.width',
+       'head.height', 'condition', 'repro_resident', 'repro_floater']
+        return [],l2,False
+
+    if job == 'chameleon':
+        l2 = ['ch.res', 'jl.res', 'tl.res', 'mass.res', 'SVL', 'prop.main',
+       'prop.patch']
+        return [],l2,False
 
 
+def cumsum_thingy(cumsum_indices,shapley_vals):
+    cat_parts = []
+    for i in range(len(cumsum_indices)-1):
+        part = shapley_vals[cumsum_indices[i]:cumsum_indices[i+1],:].sum(0,keepdim=True)
+        cat_parts.append(part)
+    p_output = torch.cat(cat_parts,dim=0)
+    return p_output
 if __name__ == '__main__':
     # d_imp = 2
     # d=10
     # palette =['r']*d_imp+ ['g']*(d-d_imp)
+    post_method='lasso'
+    interventional=False
     job='pokemon'
     model='krr_GPGP'
     fold=0
@@ -46,27 +89,49 @@ if __name__ == '__main__':
     inner_kernel._set_lengthscale(ls)
     inner_kernel=inner_kernel.to('cuda:0')
     alpha=alpha.to('cuda:0')
-    ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x_ind_l,X_r=x_ind_r,X=c.S,max_S=2500,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,device='cuda:0')
+    ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x_ind_l,X_r=x_ind_r,X=c.S,max_S=2500,rff_mode=False,
+                   eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,post_method=post_method,device='cuda:0',interventional=interventional)
+    sum_count,features_names,do_sum=return_feature_names(job)
+    x,x_prime = torch.from_numpy(c.left_tr).float(),torch.from_numpy(c.right_tr).float()
+    num_matches = 100
+    shap_l,shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
+    outputs = ps.fit(shap_l,shap_r)
 
-    x,x_prime = torch.from_numpy(c.left_test).float(),torch.from_numpy(c.right_test).float()
-    num_features = 500
-    output = ps.fit(x[0:num_features,:],x_prime[0:num_features,:])
-
-    part_one = output[:7,:]
-    part_two = output[7:,:].sum(0,keepdim=True)
-    p_output = torch.cat([part_one,part_two],dim=0)
-    tmp = p_output.cpu().numpy().flatten()
-    features_names=return_feature_names(job)
-    tst= np.arange(1,len(features_names)+1).repeat(num_features)
+    if not os.path.exists(f'{interventional}_{post_method}_{job}'):
+        os.makedirs(f'{interventional}_{post_method}_{job}')
 
 
+    for key,output in outputs.items():
+        if do_sum:
+            p_output = cumsum_thingy(sum_count,output)
+        else:
+            p_output = output
+        tmp = p_output.cpu().numpy().flatten()
+        print(features_names)
+        tst= np.arange(1,len(features_names)+1).repeat(shap_l.shape[0])
 
-    plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'])
-    plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
-    plt.show()
-    plot =  pd.DataFrame(np.abs(np.stack([tst,tmp],axis=1)),columns=['d','shapley_vals'])
-    plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
-    plt.show()
+        # Save stuff
+        # pd.DataFrame(shap_l.cpu().detach().numpy()).to_csv("tr_shap_l.csv")
+        # pd.DataFrame(shap_r.cpu().detach().numpy()).to_csv("tr_shap_r.csv")
+        # pd.DataFrame(output.cpu().detach().numpy()).to_csv("tr_ps_output.csv")
+        # pd.DataFrame(c.y_tr).to_csv("tr_y.csv")
+
+        plot =  pd.DataFrame(np.stack([tst,tmp],axis=1),columns=['d','shapley_vals'])
+        plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+        sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
+        # plt.show()
+        plt.savefig(f'{interventional}_{post_method}_{job}/{key}_1.png')
+        plt.clf()
+
+        ax=sns.stripplot(data=plot,x="d",y='shapley_vals')
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=40, ha="right")
+        plt.tight_layout()
+        plt.savefig(f'{interventional}_{post_method}_{job}/{key}_3.png')
+        plt.clf()
+        plot =  pd.DataFrame(np.abs(np.stack([tst,tmp],axis=1)),columns=['d','shapley_vals'])
+        plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+        sns.displot(plot,x="shapley_vals", hue="d", kind="kde")
+        # plt.show()
+        plt.savefig(f'{interventional}_{post_method}_{job}/{key}_2.png')
+        plt.clf()
 

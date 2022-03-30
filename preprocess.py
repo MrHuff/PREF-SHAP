@@ -94,6 +94,8 @@ def duelling_data(df):
 if __name__ == '__main__':
     df = pd.read_parquet('pref_3.parquet')
     df = df.sort_values(by=['bpid', 'uniquesessionid'])
+    n_unique  = df[categorical_cols].nunique().tolist()
+    print(n_unique)
     df = pd.get_dummies(df,columns=categorical_cols)
     if not os.path.exists('website_data'):
         os.makedirs('website_data')
@@ -106,14 +108,6 @@ if __name__ == '__main__':
         'trans_date',
         'click',
         'view',
-      #     'is_seasonless',
-      #     'is_carried_over',
-      #     'is_running_item',
-      # 'product_group_name',
-      #         'licence_company_name',
-      #         'section_name',
-      #             'product_group_name',
-      #             'product_type_name',
                   ],axis=1)
         r=r.drop(['bpid',
                   'article_id',
@@ -121,15 +115,6 @@ if __name__ == '__main__':
         'trans_date',
         'click',
         'view',
-                  # 'is_seasonless',
-                  # 'is_carried_over',
-                  # 'is_running_item',
-                  # 'product_group_name',
-                  # 'licence_company_name',
-                  # 'section_name',
-                  # 'product_group_name',
-                  # 'product_type_name',
-
                   ],axis=1)
 
         l.to_csv('website_data/left.csv')

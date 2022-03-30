@@ -128,10 +128,10 @@ class diffrentiable_FALKON_GPGP(Kernel):
 
 
         if diag:
-            xa_ = xa.unsqueeze(1)
-            xb_ = xb.unsqueeze(1)
-            xc_ = xc.unsqueeze(1)
-            xd_ = xd.unsqueeze(1)
+            xa_ = xa_.unsqueeze(1)
+            xb_ = xb_.unsqueeze(1)
+            xc_ = xc_.unsqueeze(1)
+            xd_ = xd_.unsqueeze(1)
             K = (-((xa_ - xc_) ** 2 + (xb_ - xd_) ** 2) / 2).exp() - (
                     -((xa_ - xd_) ** 2 + (xb_ - xc_) ** 2) / 2).exp()
             out.copy_(K)
@@ -151,10 +151,10 @@ class diffrentiable_FALKON_GPGP(Kernel):
         xc_ = xc.div(ls)
         xd_ = xd.div(ls)
         if diag:
-            xa_ = xa.unsqueeze(1)
-            xb_ = xb.unsqueeze(1)
-            xc_ = xc.unsqueeze(1)
-            xd_ = xd.unsqueeze(1)
+            xa_ = xa_.unsqueeze(1)
+            xb_ = xb_.unsqueeze(1)
+            xc_ = xc_.unsqueeze(1)
+            xd_ = xd_.unsqueeze(1)
             K = (-((xa_ - xc_) ** 2 + (xb_ - xd_) ** 2) / 2).exp() - (
                     -((xa_ - xd_) ** 2 + (xb_ - xc_) ** 2) / 2).exp()
             return K
@@ -172,7 +172,101 @@ class diffrentiable_FALKON_GPGP(Kernel):
     def compute_sparse(self, X1, X2, out, diag, **kwargs) -> torch.Tensor:
         raise NotImplementedError("Sparse not implemented")
 
+class diffrentiable_FALKON_UGPGP(Kernel):
+    def __init__(self, lengthscale_items,lengthscale_users,user_dim, options):
+        # Super-class constructor call. We do not specify core_fn
+        # but we must specify the hyperparameter of this kernel (lengthscale)
+        super().__init__("diffrentiable_FALKON_UGPGP", options)
+        self.lengthscale = lengthscale_items
+        self.lengthscale_users = lengthscale_users
+        self.user_dim = user_dim
 
+    def compute(self, X1: torch.Tensor, X2: torch.Tensor, out: torch.Tensor, diag: bool):
+
+        ls = self.lengthscale.to(device=X1.device, dtype=X1.dtype)
+        ls_u = self.lengthscale_users.to(device=X1.device, dtype=X1.dtype)
+
+        u_1 = X1[:self.user_dim]
+        u_2 = X2[:self.user_dim]
+        X_1 = X1[self.user_dim:]
+        X_2 = X2[self.user_dim:]
+
+        xa,xb = torch.chunk(X_1,dim=1,chunks=2)
+        xc,xd = torch.chunk(X_2,dim=1,chunks=2)
+        xa_ = xa.div(ls)
+        xb_ = xb.div(ls)
+        xc_ = xc.div(ls)
+        xd_ = xd.div(ls)
+
+        u_1_ = u_1.div(ls_u)
+        u_2_ = u_2.div(ls_u)
+
+        if diag:
+            xa_ = xa_.unsqueeze(1)
+            xb_ = xb_.unsqueeze(1)
+            xc_ = xc_.unsqueeze(1)
+            xd_ = xd_.unsqueeze(1)
+            u_1_ = u_1_.unsqueeze(1)
+            u_2_ = u_2_.unsqueeze(1)
+
+            K = (-((xa_ - xc_) ** 2 + (xb_ - xd_) ** 2) / 2).exp() - (
+                    -((xa_ - xd_) ** 2 + (xb_ - xc_) ** 2) / 2).exp()
+            L = K * (-(u_1_ - u_2_) ** 2 ).exp()
+            out.copy_(L)
+        else:
+            K = (-(pairwise_distances(xa_,xc_)+ pairwise_distances(xb_,xd_)) / 2).exp() - (
+                    -(pairwise_distances(xa_,xd_) + pairwise_distances(xb_,xc_)) / 2).exp()
+            L = K * (-pairwise_distances(u_1_,u_2_) ).exp()
+            out.copy_(L)
+        return out
+
+    def compute_diff(self, X1: torch.Tensor, X2: torch.Tensor, diag: bool):
+        # The implementation here is similar to `compute` without in-place operations.
+        ls = self.lengthscale.to(device=X1.device, dtype=X1.dtype)
+        ls_u = self.lengthscale_users.to(device=X1.device, dtype=X1.dtype)
+
+        u_1 = X1[:self.user_dim]
+        u_2 = X2[:self.user_dim]
+        X_1 = X1[self.user_dim:]
+        X_2 = X2[self.user_dim:]
+
+        xa, xb = torch.chunk(X_1, dim=1, chunks=2)
+        xc, xd = torch.chunk(X_2, dim=1, chunks=2)
+        xa_ = xa.div(ls)
+        xb_ = xb.div(ls)
+        xc_ = xc.div(ls)
+        xd_ = xd.div(ls)
+
+        u_1_ = u_1.div(ls_u)
+        u_2_ = u_2.div(ls_u)
+
+        if diag:
+            xa_ = xa_.unsqueeze(1)
+            xb_ = xb_.unsqueeze(1)
+            xc_ = xc_.unsqueeze(1)
+            xd_ = xd_.unsqueeze(1)
+            u_1_ = u_1_.unsqueeze(1)
+            u_2_ = u_2_.unsqueeze(1)
+
+            K = (-((xa_ - xc_) ** 2 + (xb_ - xd_) ** 2) / 2).exp() - (
+                    -((xa_ - xd_) ** 2 + (xb_ - xc_) ** 2) / 2).exp()
+            L = K * (-(u_1_ - u_2_) ** 2).exp()
+            return L
+        else:
+            K = (-(pairwise_distances(xa_, xc_) + pairwise_distances(xb_, xd_)) / 2).exp() - (
+                    -(pairwise_distances(xa_, xd_) + pairwise_distances(xb_, xc_)) / 2).exp()
+            L = K * (-pairwise_distances(u_1_, u_2_)).exp()
+        return L
+
+    def detach(self):
+        # Clones the class with detached hyperparameters
+        return diffrentiable_FALKON_GPGP(
+            lengthscale=self.lengthscale.detach(),
+            options=self.params
+        )
+
+    def compute_sparse(self, X1, X2, out, diag, **kwargs) -> torch.Tensor:
+        raise NotImplementedError("Sparse not implemented")
 
 class diffrentiable_FALKON_PGP(Kernel):
     def __init__(self, lengthscale, options):
@@ -190,10 +284,10 @@ class diffrentiable_FALKON_PGP(Kernel):
         xc_ = xc.div(ls)
         xd_ = xd.div(ls)
         if diag:
-            xa_ = xa.unsqueeze(1)
-            xb_ = xb.unsqueeze(1)
-            xc_ = xc.unsqueeze(1)
-            xd_ = xd.unsqueeze(1)
+            xa_ = xa_.unsqueeze(1)
+            xb_ = xb_.unsqueeze(1)
+            xc_ = xc_.unsqueeze(1)
+            xd_ = xd_.unsqueeze(1)
             K = (-pairwise_distances(xa_,xc_)/2).exp()+(-pairwise_distances(xb_,xd_)/2).exp()-(-pairwise_distances(xa_,xd_)/2).exp()-(-pairwise_distances(xb_,xc_)/2).exp()
 
             out.copy_(K)
@@ -213,10 +307,10 @@ class diffrentiable_FALKON_PGP(Kernel):
         xc_ = xc.div(ls)
         xd_ = xd.div(ls)
         if diag:
-            xa_ = xa.unsqueeze(1)
-            xb_ = xb.unsqueeze(1)
-            xc_ = xc.unsqueeze(1)
-            xd_ = xd.unsqueeze(1)
+            xa_ = xa_.unsqueeze(1)
+            xb_ = xb_.unsqueeze(1)
+            xc_ = xc_.unsqueeze(1)
+            xd_ = xd_.unsqueeze(1)
             K = (-pairwise_distances(xa_,xc_)/2).exp()+(-pairwise_distances(xb_,xd_)/2).exp()-(-pairwise_distances(xa_,xd_)/2).exp()-(-pairwise_distances(xb_,xc_)/2).exp()
 
             return K
