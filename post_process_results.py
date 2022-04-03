@@ -4,8 +4,8 @@ import pickle
 if __name__ == '__main__':
     data=[]
     columns = ['model','data','fold','val_auc','test_auc']
-    for method in ['krr_GPGP', 'krr_PGP', 'krr_vanilla']:
-        for ds in ['website_data', 'pokemon', 'flatlizard', 'chameleon']:
+    for method in ['SGD_ukrr']:
+        for ds in ['website_data_user','tennis_data_processed']:
             for f in [0, 1, 2, 3, 4]:
                 with open(f'{ds}_results/{method}/run_{f}.pickle', 'rb') as handle:
                     best_model = pickle.load(handle)
@@ -16,6 +16,6 @@ if __name__ == '__main__':
     grouped_df_std = df.groupby(['model','data'])[['val_auc','test_auc']].std().reset_index()
 
     grouped_df_mean['AUC']=grouped_df_mean['test_auc'].apply(lambda x: rf'${round(x,3)} \pm')+grouped_df_std['test_auc'].apply(lambda x: f'{round(x,3)}$')
-    save = grouped_df_mean[['model','data','AUC']]
+    save = grouped_df_mean[['model','data','val_auc','AUC']]
     save.to_latex(buf=f"final_results.tex", escape=False)
 

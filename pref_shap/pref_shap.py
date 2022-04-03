@@ -7,6 +7,7 @@ from GPGP.kernel import *
 from tqdm import tqdm
 from scipy.special import binom
 from pref_shap.tensor_CG import tensor_CG
+from numpy.random import default_rng
 
 def base_10_base_2(indices: np.array,d:int=10):
     S= np.zeros((indices.shape[0],d))
@@ -24,25 +25,42 @@ def base_10_base_2(indices: np.array,d:int=10):
         if valid_rows.sum()==0:
             return S
 
+def base_2_base_10(N:int=2500,d:int=10):
+    P = np.random.binomial(size=(N,d), n=1, p=0.5)
+    b = 2 ** np.arange(0, d)
+    unique_ref = (b*P).sum(1)
+    _,idx=np.unique(unique_ref,return_index=True)
+    return P[idx,:]
+
+
 def sample_Z(D,max_S):
-    max_range = 2**D
+    max_range = min(2**D,2**63-1)
     if max_S>=max_range:
-        configs= np.array([i for i in range(max_range)])
+        configs= np.arange(max_range)
+        return base_10_base_2(configs, D)
     else:
-        configs= np.array(random.sample([i for i in range(max_range)],max_S))
-    configs=np.sort(configs)
-    return base_10_base_2(configs,D)
+        return base_2_base_10(max_range, D)
 
 
 class pref_shap():
-    def __init__(self,alpha,k,X_l,X_r,X,U=None,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,post_method='OLS',interventional=False,device='cuda:0'):
+    def __init__(self,alpha,k,X_l,X_r,X,k_U=None,u=None,X_U=None,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,post_method='OLS',interventional=False,device='cuda:0'):
         if max_inv_row >0:
             X = X[torch.randperm(X.shape[0])[:max_inv_row],:]
         self.post_method=post_method
         self.alpha = alpha.t()
         self.cg_bs=cg_bs
         self.X_l,self.X_r,self.X= X_l.to(device),X_r.to(device),X.to(device)
-        self.U = U.to(device)
+        self.max_S=max_S
+        self.eps =eps
+        self.cg_max_its=cg_max_its
+        if X_U is not None:
+            self.u = u.to(device)
+            self.X_U = X_U.to(device)
+            self.m_u =self.u.shape[1]
+        else:
+            self.X_U=X_U
+            self.u=u
+        self.k_U = k_U
         self.N_x,self.m = self.X.shape
         self.reg = self.N_x*lamb
         self.device = device
@@ -53,23 +71,34 @@ class pref_shap():
             ls = k.ls
         else:
             self.k=k
-        self.precond = torch.inverse(self.k(self.X)+ self.eye)
-        self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=eps,maxits=cg_max_its,device=device)
-        self.Z = torch.from_numpy(sample_Z(self.m,max_S)).float().to(device)
 
+    def setup_user_vals(self):
+        self.precond = torch.inverse(self.k_U(self.X_U)+ self.eye)
+        self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=self.eps,maxits=self.cg_max_its,device=self.device)
+        self.Z = torch.from_numpy(sample_Z(self.m_u,self.max_S)).float().to(self.device)
+        const = torch.lgamma(torch.tensor(self.m_u) + 1)
+        abs_S = self.Z.sum(1)
+        a = torch.exp(const - torch.lgamma((self.m_u - abs_S) + 1) - torch.lgamma(abs_S + 1))
+        self.weights = (self.m_u - 1) / (a * (abs_S) * (self.m_u - abs_S))
+        self.weights = torch.nan_to_num(self.weights.unsqueeze(-1),posinf=1e6).to(self.device)
+        self.weighted_moore_penrose()
+        self.batched_Z = torch.chunk(self.Z,self.Z.shape[0]//self.cg_bs,dim=0)
+
+    def setup_item_vals(self):
+        self.precond = torch.inverse(self.k(self.X)+ self.eye)
+        self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=self.eps,maxits=self.cg_max_its,device=self.device)
+        self.Z = torch.from_numpy(sample_Z(self.m,self.max_S)).float().to(self.device)
         const = torch.lgamma(torch.tensor(self.m) + 1)
         abs_S = self.Z.sum(1)
         a = torch.exp(const - torch.lgamma((self.m - abs_S) + 1) - torch.lgamma(abs_S + 1))
         self.weights = (self.m - 1) / (a * (abs_S) * (self.m - abs_S))
-        self.weights = torch.nan_to_num(self.weights.unsqueeze(-1),posinf=1e6).to(device)
+        self.weights = torch.nan_to_num(self.weights.unsqueeze(-1),posinf=1e6).to(self.device)
         self.weighted_moore_penrose()
-        self.batched_Z = torch.chunk(self.Z,self.Z.shape[0]//cg_bs,dim=0)
-
+        self.batched_Z = torch.chunk(self.Z,self.Z.shape[0]//self.cg_bs,dim=0)
 
     def weighted_moore_penrose(self):
         ztw = self.Z * self.weights
         self.zwz=torch.inverse(ztw.t()@self.Z)
-
 
     def kernel_tensor_batch(self,S_list_batch,x,x_prime):
         inv_tens=[]
@@ -133,9 +162,48 @@ class pref_shap():
 
         return output,first_flag,last_flag
 
+
+    def kernel_tensor_batch_user_case_1(self,u,S_batch,x,x_prime):
+        inv_tens=[]
+        vec = []
+        vec_c=[]
+        RH = []
+        first_flag=False
+        last_flag=False
+        for i in range(S_batch.shape[0]):
+            S = S_batch[i,:].bool()
+            S_C = ~S
+            if S.sum()==0:
+                first_flag=True
+            elif S_C.sum()==0:
+                last_flag=True
+            else:
+                inv_tens.append(self.k_U(self.X_U[:,S],None,S))
+                u_S,u_Sc= u[:,S],u[:,~S]
+                vec_cat  = self.k_U(self.X_U[:,S],u_S,S)
+                vec_c_cat  = self.k_U(self.X_U[:,~S],u_Sc,S_C)
+                RH_cat = self.k(self.X_l,x)*self.k(self.X_r,x_prime)-self.k(self.X_l,x_prime)*self.k(self.X_r,x)
+                RH.append(RH_cat)
+                vec.append(vec_cat)
+                vec_c.append(vec_c_cat)
+
+        inv_tens=torch.stack(inv_tens,dim=0)
+        vec = torch.stack(vec,dim=0)
+        vec_c = torch.stack(vec_c,dim=0)
+        RH = torch.stack(RH,dim=0)
+
+        cg_output = self.tensor_CG.solve(inv_tens,vec) #BS x N x D
+        #Write assertion error
+
+        if torch.isnan(cg_output).any():
+            cg_output=torch.nan_to_num(cg_output, nan=0.0)
+        LH = torch.bmm(vec_c,cg_output)
+        output = LH*RH
+        return output,first_flag,last_flag
+
     def kernel_tensor_batch_user_case_2(self,u, S_list_batch,x,x_prime):
         output,first_flag,last_flag=self.kernel_tensor_batch(S_list_batch,x,x_prime)
-        user_k = self.k(self.U,u)
+        user_k = self.k_U(self.u,u)
         output = user_k*output
         return output,first_flag,last_flag
 
@@ -252,7 +320,9 @@ class pref_shap():
                                                 if None, you look at all potential 2**M permutation ]. Defaults to "MC".
             num_samples (int, optional): [number of samples to use]. Defaults to None.
             verbose (str, optional): [description]. Defaults to False.
+
         """
+        self.setup_item_vals()
         x=x.to(self.device)
         x_prime=x_prime.to(self.device)
         # Set up containers
@@ -268,7 +338,7 @@ class pref_shap():
         self.Y_target=Y_target
 
 
-    def fit_user(self,u,x,x_prime,case=0):
+    def fit_user(self,u,x,x_prime,case=2):
         """[Running the RKHS SHAP Algorithm to explain kernel ridge regression]
         Args:
             X_new (np.array): [New X data]
@@ -279,13 +349,17 @@ class pref_shap():
             num_samples (int, optional): [number of samples to use]. Defaults to None.
             verbose (str, optional): [description]. Defaults to False.
         """
+        if case==1:
+            self.setup_user_vals()
+        if case==2:
+            self.setup_item_vals()
         x=x.to(self.device)
         x_prime=x_prime.to(self.device)
         u=u.to(self.device)
         # Set up containers
         Y_target = []
         for batch in tqdm(self.batched_Z):
-            Y_target.append(self.value_observation(batch,x,x_prime))
+            Y_target.append(self.user_observation(batch,x,x_prime,u,case))
         Y_cat = torch.cat(Y_target, dim=0)
         if len(Y_cat.shape) == 1:
             Y_target = self.weights.squeeze() * Y_cat
@@ -293,14 +367,13 @@ class pref_shap():
             Y_target = self.weights* Y_cat
         self.Y_target=Y_target
 
-    def construct_values(self,post_method=None):
+    def construct_values(self,coeffs,post_method=None):
         if not post_method is None:
             self.post_method=post_method
         shap_dict={}
         # if self.post_method=='OLS':
-        shap_dict['OLS']=self.zwz@(self.Z.t()@self.Y_target)
+        shap_dict[0]=self.zwz@(self.Z.t()@self.Y_target)
             # return self.zwz@(self.Z.t()@Y_target)
-        coeffs=1e-11*np.cumprod([10]*7)
         for coeff in coeffs:
             if self.post_method == 'lasso':
                 clf = Lasso(coeff)

@@ -14,16 +14,16 @@ import os
 if __name__ == '__main__':
 
     train_params={
-        'dataset':'website_data',
+        'dataset':'website_data_user',
         'fold':0,
         'epochs':100,
         'patience':5,
-        'model_string':'SGD_krr', #krr_vanilla
+        'model_string':'SGD_ukrr', #krr_vanilla
         'bs':1000
     }
-    for method in ['SGD_krr']:
-        for ds in ['pokemon']:
-            for f in [0,1,2,3,4]:
+    for method in ['SGD_ukrr']:
+        for ds in ['tennis_data_processed','website_data_user']:
+            for f in [0]:
                 train_params['dataset']=ds
                 train_params['model_string']=method
                 train_params['fold']=f
