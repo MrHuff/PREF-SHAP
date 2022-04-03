@@ -22,7 +22,7 @@ if __name__ == '__main__':
         'bs':1000
     }
     for method in ['SGD_ukrr']:
-        for ds in ['tennis_data_processed','website_data_user']:
+        for ds in ['website_data_user']:
             for f in [0]:
                 train_params['dataset']=ds
                 train_params['model_string']=method

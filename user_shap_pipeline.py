@@ -43,7 +43,8 @@ def return_feature_names(job,case=2):
             l1.insert(0, 0)
             l1 = np.cumsum(l1).tolist()
             l2 = ['tourney_conditions','tourney_surface']
-        coeffs = [1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
+        # coeffs = [1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
+        coeffs = np.array([1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3])*1e-4
 
         return l1, l2, True, coeffs
 
@@ -90,8 +91,8 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
 
     alpha=alpha.to('cuda:0')
     ps = pref_shap(alpha=alpha,k=inner_kernel,X_l=x_ind_l,X_r=x_ind_r,X=c.S,u=x_u,k_U=inner_kernel_u,X_U=c.S_u,max_S=2500,rff_mode=False,
-                   eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,post_method=post_method,device='cuda:0',interventional=interventional)
-    sum_count,features_names,do_sum,coeffs=return_feature_names(job)
+                   eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=2500,cg_bs=5,post_method=post_method,device='cuda:0',interventional=interventional)
+    sum_count,features_names,do_sum,coeffs=return_feature_names(job,case)
     x,x_prime = torch.from_numpy(c.left_val).float(),torch.from_numpy(c.right_val).float()
     u = torch.from_numpy(c.val_u).float()
     u_shap = u[0:num_matches,:]
@@ -112,27 +113,10 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     plot = pd.concat(big_plot,axis=0).reset_index()
     return plot,features_names
 
-if __name__ == '__main__':
-    # d_imp = 2
-    # d=10
-    # palette =['r']*d_imp+ ['g']*(d-d_imp)
-    post_method='lasso'
-    interventional=False
-    job='tennis_data_processed'
-    model='SGD_ukrr'
-    fold=0
-    case=2
-    train_params={
-        'dataset':job,
-        'fold':fold,
-        'epochs':100,
-        'patience':5,
-        'model_string':'SGD_ukrr', #krr_vanilla
-        'bs':1000
-    }
+def get_plots(job,fold,train_params,post_method,folds,interventional,case,num_matches=100):
     big_plt=[]
-    for f in [0]:
-        data,features_names = get_shapley_vals(job=job,model=model,fold=fold,train_params=train_params,num_matches=100,post_method=post_method,interventional=interventional,case=case)
+    for f in folds:
+        data,features_names = get_shapley_vals(job=job,model=model,fold=f,train_params=train_params,num_matches=num_matches,post_method=post_method,interventional=interventional,case=case)
         big_plt.append(data)
     plot= pd.concat(big_plt,axis=0).reset_index()
 
@@ -149,4 +133,27 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.savefig(f'{interventional}_{post_method}_{job}_{case}/stripplot_2.png')
     plt.clf()
+
+
+if __name__ == '__main__':
+    # d_imp = 2
+    # d=10
+    # palette =['r']*d_imp+ ['g']*(d-d_imp)
+    post_method='lasso'
+    interventional=False
+    job='website_data_user'
+    model='SGD_ukrr'
+    fold=0
+    case=2
+    train_params={
+        'dataset':job,
+        'fold':fold,
+        'epochs':100,
+        'patience':5,
+        'model_string':'SGD_ukrr', #krr_vanilla
+        'bs':1000
+    }
+    folds=[0]
+    for case in [2,1]:
+        get_plots(job,fold,train_params,post_method,folds,interventional,case)
 

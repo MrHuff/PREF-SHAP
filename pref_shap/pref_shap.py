@@ -39,7 +39,7 @@ def sample_Z(D,max_S):
         configs= np.arange(max_range)
         return base_10_base_2(configs, D)
     else:
-        return base_2_base_10(max_range, D)
+        return base_2_base_10(max_S, D)
 
 
 class pref_shap():
@@ -54,6 +54,8 @@ class pref_shap():
         self.eps =eps
         self.cg_max_its=cg_max_its
         if X_U is not None:
+            if max_inv_row > 0:
+                X_U = X_U[torch.randperm(X_U.shape[0])[:max_inv_row], :]
             self.u = u.to(device)
             self.X_U = X_U.to(device)
             self.m_u =self.u.shape[1]
@@ -61,10 +63,9 @@ class pref_shap():
             self.X_U=X_U
             self.u=u
         self.k_U = k_U
-        self.N_x,self.m = self.X.shape
-        self.reg = self.N_x*lamb
         self.device = device
-        self.eye = torch.eye(self.N_x).to(device)*self.reg
+        self.lamb=lamb
+
         self.rff=rff_mode
         self.interventional = interventional
         if self.rff:
@@ -73,6 +74,9 @@ class pref_shap():
             self.k=k
 
     def setup_user_vals(self):
+        self.N_x,self.m = self.X_U.shape
+        self.reg = self.N_x*self.lamb
+        self.eye = torch.eye(self.N_x).to(self.device)*self.reg
         self.precond = torch.inverse(self.k_U(self.X_U)+ self.eye)
         self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=self.eps,maxits=self.cg_max_its,device=self.device)
         self.Z = torch.from_numpy(sample_Z(self.m_u,self.max_S)).float().to(self.device)
@@ -85,6 +89,9 @@ class pref_shap():
         self.batched_Z = torch.chunk(self.Z,self.Z.shape[0]//self.cg_bs,dim=0)
 
     def setup_item_vals(self):
+        self.N_x,self.m = self.X.shape
+        self.reg = self.N_x*self.lamb
+        self.eye = torch.eye(self.N_x).to(self.device)*self.reg
         self.precond = torch.inverse(self.k(self.X)+ self.eye)
         self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=self.eps,maxits=self.cg_max_its,device=self.device)
         self.Z = torch.from_numpy(sample_Z(self.m,self.max_S)).float().to(self.device)
@@ -167,6 +174,7 @@ class pref_shap():
         inv_tens=[]
         vec = []
         vec_c=[]
+        vec_a=[]
         RH = []
         first_flag=False
         last_flag=False
@@ -179,17 +187,21 @@ class pref_shap():
                 last_flag=True
             else:
                 inv_tens.append(self.k_U(self.X_U[:,S],None,S))
-                u_S,u_Sc= u[:,S],u[:,~S]
+                u_S,u_Sc= u[:,S],u[:,S_C]
+                u_bar,u_bar_Sc = self.u[:,S],self.u[:,S_C]
                 vec_cat  = self.k_U(self.X_U[:,S],u_S,S)
-                vec_c_cat  = self.k_U(self.X_U[:,~S],u_Sc,S_C)
+                vec_c_cat  = self.k_U(u_bar_Sc,self.X_U[:,S_C],S_C)
+                vec_a_cat  = self.k_U(u_bar,u_S,S)
+
                 RH_cat = self.k(self.X_l,x)*self.k(self.X_r,x_prime)-self.k(self.X_l,x_prime)*self.k(self.X_r,x)
                 RH.append(RH_cat)
                 vec.append(vec_cat)
                 vec_c.append(vec_c_cat)
-
+                vec_a.append(vec_a_cat)
         inv_tens=torch.stack(inv_tens,dim=0)
         vec = torch.stack(vec,dim=0)
         vec_c = torch.stack(vec_c,dim=0)
+        vec_a = torch.stack(vec_a,dim=0)
         RH = torch.stack(RH,dim=0)
 
         cg_output = self.tensor_CG.solve(inv_tens,vec) #BS x N x D
@@ -197,7 +209,7 @@ class pref_shap():
 
         if torch.isnan(cg_output).any():
             cg_output=torch.nan_to_num(cg_output, nan=0.0)
-        LH = torch.bmm(vec_c,cg_output)
+        LH = vec_a* torch.bmm(vec_c,cg_output)
         output = LH*RH
         return output,first_flag,last_flag
 

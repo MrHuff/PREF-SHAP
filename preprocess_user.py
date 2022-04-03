@@ -101,6 +101,9 @@ def parse_correct_age(x):
 if __name__ == '__main__':
     df = pd.read_parquet('pref_user_2.parquet')
     df = df.sort_values(by=['bpid', 'uniquesessionid'])
+    df['year_of_birth'] = df['year_of_birth'].apply(lambda x: parse_correct_age(x))
+    df['year_of_birth'].fillna((df['year_of_birth'].mean()), inplace=True)
+    df['gender_code'].fillna((3), inplace=True)
     # df = df.iloc[0:10000,:]
     n_unique  = df[item_cols].nunique().tolist()
     print(n_unique)
@@ -142,7 +145,7 @@ if __name__ == '__main__':
  'composition',
                   'city'
                   ],axis=1)
-        u= pd.get_dummies(l[u_cols]).values
+        u= pd.get_dummies(l[u_cols],columns=['gender_code']).values
         l=l.drop(columns=u_cols,axis=1)
         r=r.drop(columns=u_cols,axis=1)
         l= l.values
@@ -166,7 +169,7 @@ if __name__ == '__main__':
         df['gender_code'].fillna((3), inplace=True)
         S_u = df.drop_duplicates(subset=['bpid'])
         S_u = S_u[['year_of_birth','gender_code']]
-        S_u = pd.get_dummies(S_u,'gender_code').values
+        S_u = pd.get_dummies(S_u,columns=['gender_code']).values
         with open('website_data_user/S_u.npy', 'wb') as f:
             np.save(f, S_u)
         with open('website_data_user/y.npy', 'wb') as f:
