@@ -22,8 +22,8 @@ if __name__ == '__main__':
         'bs':1000
     }
     for method in ['SGD_ukrr']:
-        for ds in ['website_data_user']:
-            for f in [0]:
+        for ds in ['tennis_data_processed','website_data_user']:
+            for f in [0,1,2,3,4]:
                 train_params['dataset']=ds
                 train_params['model_string']=method
                 train_params['fold']=f

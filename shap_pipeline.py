@@ -17,7 +17,7 @@ def return_feature_names(job):
        # 'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
        # 'Psychic', 'Rock', 'Steel', 'Water']
         l2=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary','Type']
-        coeffs=[1e-4,1e-3,2e-3,3e-3,4e-3,5e-3]
+        coeffs=np.linspace(1e-6,1e-3,5)
 
         return l1,l2,True,coeffs
 
@@ -115,7 +115,7 @@ if __name__ == '__main__':
         'bs':1000
     }
     big_plt=[]
-    for f in [0,1,2,3,4,5]:
+    for f in [0,1,2,3,4]:
         data,features_names = get_shapley_vals(job=job,model=model,fold=fold,train_params=train_params,num_matches=-1,post_method=post_method,interventional=interventional)
         big_plt.append(data)
     plot= pd.concat(big_plt,axis=0).reset_index()

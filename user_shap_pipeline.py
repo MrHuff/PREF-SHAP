@@ -28,7 +28,7 @@ def return_feature_names(job,case=2):
             l1 = np.cumsum(l1).tolist()
             l2 = ['year_of_birth','gender_code'
                   ]
-        coeffs = [1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
+        coeffs=np.linspace(1e-9,1e-6,5)
 
         return l1, l2, True, coeffs
 
@@ -44,7 +44,7 @@ def return_feature_names(job,case=2):
             l1 = np.cumsum(l1).tolist()
             l2 = ['tourney_conditions','tourney_surface']
         # coeffs = [1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
-        coeffs = np.array([1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3])*1e-4
+        coeffs=np.linspace(1e-9,1e-6,5)
 
         return l1, l2, True, coeffs
 
@@ -155,5 +155,5 @@ if __name__ == '__main__':
     }
     folds=[0]
     for case in [2,1]:
-        get_plots(job,fold,train_params,post_method,folds,interventional,case)
+        get_plots(job,fold,train_params,post_method,folds,interventional,case,num_matches=-1)
 
