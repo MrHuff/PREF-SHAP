@@ -7,6 +7,62 @@ pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 
 
+def save_data(w,los):
+    l,r = [],[]
+    y=[]
+    for i in range(w.shape[0]):
+        y_val = np.random.choice([-1,1])
+        y.append(y_val)
+        if y_val==1:
+            r.append(w[i,:])
+            l.append(los[i,:])
+        else:
+            r.append(los[i,:])
+            l.append(w[i,:])
+    y=np.array(y)
+    l=np.stack(l,axis=0)
+    r=np.stack(r,axis=0)
+    # y = np.ones(r.shape[0])
+    fn = 'tennis_data_processed'
+
+    if not os.path.exists(fn):
+        os.makedirs(fn)
+    with open(f'{fn}/y.npy', 'wb') as f:
+        np.save(f, y)
+    with open(f'{fn}/u.npy', 'wb') as f:
+        np.save(f, u)
+    with open(f'{fn}/l_processed.npy', 'wb') as f:
+        np.save(f, l)
+    with open(f'{fn}/r_processed.npy', 'wb') as f:
+        np.save(f, r)
+    with open(f'{fn}/S.npy', 'wb') as f:
+        np.save(f, S)
+    with open(f'{fn}/S_u.npy', 'wb') as f:
+        np.save(f, S_u)
+
+def save_data_wl(w,los):
+    y = np.ones(los.shape[0])
+    l=los
+    r=w
+    fn = 'tennis_data_processed_wl'
+    if not os.path.exists(fn):
+        os.makedirs(fn)
+    with open(f'{fn}/y.npy', 'wb') as f:
+        np.save(f, y)
+    with open(f'{fn}/u.npy', 'wb') as f:
+        np.save(f, u)
+    with open(f'{fn}/l_processed.npy', 'wb') as f:
+        np.save(f, l)
+    with open(f'{fn}/r_processed.npy', 'wb') as f:
+        np.save(f, r)
+    with open(f'{fn}/S.npy', 'wb') as f:
+        np.save(f, S)
+    with open(f'{fn}/S_u.npy', 'wb') as f:
+        np.save(f, S_u)
+
+
+
+
 if __name__ == '__main__':
     matches = pd.read_csv('tennis_data/match_scores_1991-2016_unindexed.csv')[['tourney_url_suffix','winner_player_id','loser_player_id']]
     env_data = pd.read_csv('tennis_data/tournaments_1877-2017_unindexed.csv')[['tourney_url_suffix','tourney_conditions','tourney_surface']]
@@ -47,40 +103,42 @@ if __name__ == '__main__':
     all_relevant_players=all_relevant_players.drop_duplicates()
     S=all_relevant_players.to_frame().merge(players, left_on=0, right_on='player_id', how='inner')
     S = S.drop(['player_id',0],axis=1).values
+    # save_data(w,los)
+    save_data_wl(w,los)
 
-    l,r = [],[]
-    y=[]
-    for i in range(w.shape[0]):
-        y_val = np.random.choice([-1,1])
-        y.append(y_val)
-        if y_val==1:
-            r.append(w[i,:])
-            l.append(los[i,:])
-        else:
-            r.append(los[i,:])
-            l.append(w[i,:])
-
-    y=np.array(y)
-    l=np.stack(l,axis=0)
-    r=np.stack(r,axis=0)
-    # y = np.ones(r.shape[0])
-
-
-    if not os.path.exists('tennis_data_processed'):
-        os.makedirs('tennis_data_processed')
-
-    with open('tennis_data_processed/y.npy', 'wb') as f:
-        np.save(f, y)
-    with open('tennis_data_processed/u.npy', 'wb') as f:
-        np.save(f, u)
-    with open('tennis_data_processed/l_processed.npy', 'wb') as f:
-        np.save(f, l)
-    with open('tennis_data_processed/r_processed.npy', 'wb') as f:
-        np.save(f, r)
-    with open('tennis_data_processed/S.npy', 'wb') as f:
-        np.save(f, S)
-    with open('tennis_data_processed/S_u.npy', 'wb') as f:
-        np.save(f, S_u)
+    # l,r = [],[]
+    # y=[]
+    # for i in range(w.shape[0]):
+    #     y_val = np.random.choice([-1,1])
+    #     y.append(y_val)
+    #     if y_val==1:
+    #         r.append(w[i,:])
+    #         l.append(los[i,:])
+    #     else:
+    #         r.append(los[i,:])
+    #         l.append(w[i,:])
+    #
+    # y=np.array(y)
+    # l=np.stack(l,axis=0)
+    # r=np.stack(r,axis=0)
+    # # y = np.ones(r.shape[0])
+    #
+    #
+    # if not os.path.exists(fn):
+    #     os.makedirs(fn)
+    #
+    # with open(f'{fn}/y.npy', 'wb') as f:
+    #     np.save(f, y)
+    # with open(f'{fn}/u.npy', 'wb') as f:
+    #     np.save(f, u)
+    # with open(f'{fn}/l_processed.npy', 'wb') as f:
+    #     np.save(f, l)
+    # with open(f'{fn}/r_processed.npy', 'wb') as f:
+    #     np.save(f, r)
+    # with open(f'{fn}/S.npy', 'wb') as f:
+    #     np.save(f, S)
+    # with open(f'{fn}/S_u.npy', 'wb') as f:
+    #     np.save(f, S_u)
 
 
 

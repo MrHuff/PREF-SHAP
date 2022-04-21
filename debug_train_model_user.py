@@ -19,14 +19,15 @@ if __name__ == '__main__':
         'epochs':100,
         'patience':5,
         'model_string':'SGD_ukrr', #krr_vanilla
-        'bs':1000
+        'bs':1000,
+        'double_up':True,
     }
-    for method in ['SGD_ukrr']:
-        for ds in ['tennis_data_processed','website_data_user']:
-            for f in [0,1,2,3,4]:
+    for method in ['SGD_ukrr','SGD_ukrr_pgp']:
+        for ds in ['website_user_data_wl']:
+            for f in [0,1,2]:
                 train_params['dataset']=ds
                 train_params['model_string']=method
                 train_params['fold']=f
-                c=train_GP(train_params=train_params,m=1000)
+                c=train_GP(train_params=train_params, m_fac=5.0)
                 c.train_model()
 

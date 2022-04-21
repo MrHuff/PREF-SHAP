@@ -23,28 +23,36 @@ def return_feature_names(job,case=2):
                        'garment_group_name',
                  ]
         else:
-            l1 = [1,4]
+            l1 = [1,1,1,1,1]
             l1.insert(0, 0)
             l1 = np.cumsum(l1).tolist()
-            l2 = ['year_of_birth','gender_code'
+            l2 = ['year_of_birth','gender_code_1','gender_code_2','gender_code_0','gender_code_3'
                   ]
-        coeffs=np.linspace(1e-9,1e-6,5)
+        coeffs= 10**np.linspace(-9,-6,20)
 
         return l1, l2, True, coeffs
 
     if job=='tennis_data_processed':
         if case==2:
-            l1 = [1, 1, 1, 1, 4, 3]
+            l1 = [1, 1, 1, 1, 1,1,1,1, 1,1,1]
             l1.insert(0, 0)
             l1 = np.cumsum(l1).tolist()
-            l2 = ['birth_year', 'weight_kg', 'height_cm', 'pro_age', 'handedness', 'backhand']
+            l2 = ['birth_year', 'weight_kg', 'height_cm', 'pro_age', 'handedness_Ambidextrous',
+ 'handedness_Left-Handed',
+ 'handedness_Right-Handed',
+ 'handedness_unknown',
+ 'backhand_One-Handed Backhand',
+ 'backhand_Two-Handed Backhand',
+ 'backhand_unknown']
         else:
-            l1 = [2, 4]
+            l1 = [1,1, 1,1,1,1]
             l1.insert(0, 0)
             l1 = np.cumsum(l1).tolist()
-            l2 = ['tourney_conditions','tourney_surface']
+            l2 = ['tourney_conditions_Indoor', 'tourney_conditions_Outdoor',
+       'tourney_surface_Carpet', 'tourney_surface_Clay',
+       'tourney_surface_Grass', 'tourney_surface_Hard']
         # coeffs = [1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
-        coeffs=np.linspace(1e-9,1e-6,5)
+        coeffs= 10**np.linspace(-9,-5,20)
 
         return l1, l2, True, coeffs
 
@@ -76,8 +84,8 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     ind_points = best_model['inducing_points_i'].float()
     x_ind_l,x_ind_r  = torch.chunk(ind_points,dim=1,chunks=2)
     x_u = best_model['inducing_points_u']
-
-    c=train_GP(train_params=train_params,m=1000)
+    job = train_params['dataset']
+    c=train_GP(train_params=train_params, m_fac=5.0 if job=='website_data_user_wl' else 1.0)
     c.load_and_split_data()
 
     inner_kernel=RBF_multiple_ls(d=x_ind_l.shape[1])
@@ -96,7 +104,6 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     x,x_prime = torch.from_numpy(c.left_val).float(),torch.from_numpy(c.right_val).float()
     u = torch.from_numpy(c.val_u).float()
     u_shap = u[0:num_matches,:]
-    # num_matches = 100
     shap_l,shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
     ps.fit_user(u_shap,shap_l,shap_r,case)
     outputs = ps.construct_values(coeffs)
@@ -113,47 +120,55 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     plot = pd.concat(big_plot,axis=0).reset_index()
     return plot,features_names
 
-def get_plots(job,fold,train_params,post_method,folds,interventional,case,num_matches=100):
+def get_plots(job,fold,train_params,post_method,folds,interventional,case,num_matches=-1):
     big_plt=[]
     for f in folds:
         data,features_names = get_shapley_vals(job=job,model=model,fold=f,train_params=train_params,num_matches=num_matches,post_method=post_method,interventional=interventional,case=case)
+        data['fold']=f
         big_plt.append(data)
-    plot= pd.concat(big_plt,axis=0).reset_index()
-
-    if not os.path.exists(f'{interventional}_{post_method}_{job}_{case}'):
-        os.makedirs(f'{interventional}_{post_method}_{job}_{case}')
+    plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
     plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-    sns.displot(plot,x="shapley_vals", hue="d", kind="kde",col='lambda',facet_kws=dict(sharey=False,sharex=False))
-    plt.savefig(f'{interventional}_{post_method}_{job}_{case}/displot_1.png')
-    plt.clf()
+    return plot
 
-    axs=sns.catplot(data=plot,x="d",y='shapley_vals',col='lambda',sharey=False)
-    for ax in axs.axes[0]:
-        ax.set_xticklabels(ax.get_xticklabels(), rotation=40, ha="right")
-    plt.tight_layout()
-    plt.savefig(f'{interventional}_{post_method}_{job}_{case}/stripplot_2.png')
-    plt.clf()
+    # if not os.path.exists(f'{interventional}_{post_method}_{job}_{case}'):
+    #     os.makedirs(f'{interventional}_{post_method}_{job}_{case}')
+    # sns.displot(plot,x="shapley_vals", hue="d", kind="kde",col='lambda',facet_kws=dict(sharey=False,sharex=False))
+    # plt.savefig(f'{interventional}_{post_method}_{job}_{case}/displot_1.png')
+    # plt.clf()
+    #
+    # axs=sns.catplot(data=plot,x="d",y='shapley_vals',col='lambda',sharey=False)
+    # for ax in axs.axes[0]:
+    #     ax.set_xticklabels(ax.get_xticklabels(), rotation=40, ha="right")
+    # plt.tight_layout()
+    # plt.savefig(f'{interventional}_{post_method}_{job}_{case}/stripplot_2.png')
+    # plt.clf()
 
 
 if __name__ == '__main__':
     # d_imp = 2
     # d=10
     # palette =['r']*d_imp+ ['g']*(d-d_imp)
-    post_method='lasso'
     interventional=False
-    job='website_data_user'
-    model='SGD_ukrr'
-    fold=0
-    case=2
-    train_params={
-        'dataset':job,
-        'fold':fold,
-        'epochs':100,
-        'patience':5,
-        'model_string':'SGD_ukrr', #krr_vanilla
-        'bs':1000
-    }
-    folds=[0]
-    for case in [2,1]:
-        get_plots(job,fold,train_params,post_method,folds,interventional,case,num_matches=-1)
+    for j in ['tennis_data_processed_wl','website_data_user_wl']:
+        for post_method in ['lasso','ridge','elastic']:
+
+            job=j
+            model='SGD_ukrr'
+            fold=0
+            case=2
+            train_params={
+                'dataset':job,
+                'fold':fold,
+                'epochs':100,
+                'patience':5,
+                'model_string':'SGD_ukrr', #krr_vanilla
+                'bs':1000,
+                'double_up': False,
+            }
+            folds=[0,1,2]
+            for case in [2,1]:
+                data = get_plots(job,fold,train_params,post_method,folds,interventional,case,num_matches=-1)
+                if not os.path.exists(f'{interventional}_{job}'):
+                    os.makedirs(f'{interventional}_{job}')
+                data.to_csv(f'{interventional}_{job}/{interventional}_{job}_{post_method}_{case}.csv')
 

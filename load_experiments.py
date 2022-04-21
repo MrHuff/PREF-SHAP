@@ -608,21 +608,54 @@ def reshape_data(full_choix_ls,predictors):
     right = np.stack(right,axis=0)
     return left,right,Y
 
+def reshape_data_wl(full_choix_ls,predictors):
+    left = []
+    right = []
+    y = []
+    for a,b in full_choix_ls:
+        a,b = int(a),int(b)
+        winner_cov,looser_cov=predictors[a,:],predictors[b,:]
+        right.append(winner_cov)
+        left.append(looser_cov)
+        y.append(1)
+    Y = np.array(y)
+    left = np.stack(left,axis=0)
+    right = np.stack(right,axis=0)
+    return left,right,Y
+
+def save_data(ds_name,choix_ls,predictors):
+    l, r, y = reshape_data(choix_ls, predictors)
+    if not os.path.exists(f'{ds_name}'):
+        os.makedirs(ds_name)
+    with open(f'{ds_name}/l_processed.npy', 'wb') as f:
+        np.save(f, l)
+    with open(f'{ds_name}/r_processed.npy', 'wb') as f:
+        np.save(f, r)
+    with open(f'{ds_name}/S.npy', 'wb') as f:
+        np.save(f, predictors)
+    with open(f'{ds_name}/y.npy', 'wb') as f:
+        np.save(f, y)
+
+def save_data_wl(ds_name,choix_ls,predictors):
+    l, r, y = reshape_data_wl(choix_ls, predictors)
+    if not os.path.exists(f'{ds_name}_wl'):
+        os.makedirs(ds_name+'_wl')
+    with open(f'{ds_name}_wl/l_processed.npy', 'wb') as f:
+        np.save(f, l)
+    with open(f'{ds_name}_wl/r_processed.npy', 'wb') as f:
+        np.save(f, r)
+    with open(f'{ds_name}_wl/S.npy', 'wb') as f:
+        np.save(f, predictors)
+    with open(f'{ds_name}_wl/y.npy', 'wb') as f:
+        np.save(f, y)
+
 if __name__ == '__main__':
 
-    for func,ds_name in zip([FlatLizard,Chameleon,Pokemon],['flatlizard','chameleon','pokemon']):
+    for func,ds_name in zip([Chameleon,Pokemon],['chameleon','pokemon']):
         B_train, choix_ls, predictors = func()
-        l,r,y=reshape_data(choix_ls,predictors)
-        if not os.path.exists(f'{ds_name}'):
-            os.makedirs(ds_name)
-        with open(f'{ds_name}/l_processed.npy', 'wb') as f:
-            np.save(f, l)
-        with open(f'{ds_name}/r_processed.npy', 'wb') as f:
-            np.save(f, r)
-        with open(f'{ds_name}/S.npy', 'wb') as f:
-            np.save(f, predictors)
-        with open(f'{ds_name}/y.npy', 'wb') as f:
-            np.save(f, y)
+        save_data(ds_name,choix_ls,predictors)
+        save_data_wl(ds_name,choix_ls,predictors)
+
 
 
     # print(B_train.shape)

@@ -8,9 +8,9 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler,StandardScaler
 from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold,StratifiedGroupKFold
 import tqdm
-from GPGP.KRR_model import train_KRR,train_KRR_PGP,train_vanilla_KRR,train_KRR_user,SGD_KRR,SGD_UKRR
+from GPGP.KRR_model import SGD_KRR,SGD_UKRR,SGD_UKRR_PGP,SGD_KRR_PGP
 
 
 def sq_dist( x1, x2):
@@ -123,7 +123,7 @@ class StratifiedKFold3(StratifiedKFold):
         fold_indices=[]
         for train_indxs, test_indxs in s:
             y_train = y[train_indxs]
-            train_indxs, cv_indxs = train_test_split(train_indxs,stratify=y_train, test_size=(1 / (self.n_splits - 1)))
+            train_indxs, cv_indxs = train_test_split(train_indxs,random_state=42,stratify=y_train, test_size=(1 / (self.n_splits - 1)))
             # yield train_indxs, cv_indxs, test_indxs
             fold_indices.append((train_indxs, cv_indxs, test_indxs))
         return fold_indices
@@ -138,60 +138,52 @@ def save_data(data_dir_load,files,u,u_prime,y):
         pickle.dump({ 'X':u,'X_prime':u_prime,'Y':y}, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 class train_GP():
-    def __init__(self,train_params,m=10,device='cuda:0'):
+    def __init__(self, train_params, m_fac=1., device='cuda:0'):
         self.device=device
         self.dataset_string = train_params['dataset']
         self.fold = train_params['fold']
         self.epochs=train_params['epochs']
+        self.double_up = train_params['double_up']
         self.patience=train_params['patience']
         self.model_string = train_params['model_string']
         self.bs = train_params['bs']
         self.save_dir = f'{self.dataset_string}_results/{self.model_string}/'
-        self.m=m
+        self.m=m_fac
         self.load_and_split_data()
         self.init_model()
 
     def init_model(self):
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
-
-        inducing_points = self.dataset.train_X[torch.randperm(self.dataset.train_X.shape[0])[:self.m], :].to(self.device)
-        if self.model_string=='GPGP_exact':
-            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
-            self.model = ExactGPGP(likelihood=self.likelihood,train_x=self.dataset.train_X,train_y=self.dataset.train_y)
-        if self.model_string=='GPGP_approx':
-            self.model = ApproximateGPGP(inducing_points=inducing_points,dim=inducing_points.shape[1])
-            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
-        if self.model_string=='krr_GPGP':
-            self.model = train_KRR
-        if self.model_string=='krr_PGP':
-            self.model = train_KRR_PGP
-        if self.model_string=='krr_vanilla':
-            self.model = train_vanilla_KRR
-        if self.model_string=='krr_user':
-            self.model = train_KRR_user
-        if self.model_string=='PGP_exact':
-            pass
         if self.model_string=='SGD_krr':
             self.model = SGD_KRR
         if self.model_string=='SGD_ukrr':
             self.model = SGD_UKRR
-        if self.model_string=='PGP_approx':
-            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
-
-        if self.model_string=='vanilla_exact':
-            self.likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self.device)
-            self.model = ExactVanilla(likelihood=self.likelihood,train_x=self.dataset.train_X,train_y=self.dataset.train_y)
-        if self.model_string=='vanilla_approx':
-            self.model = ApproximateVanilla(inducing_points=inducing_points,dim=inducing_points.shape[1])
+        if self.model_string=='SGD_ukrr_pgp':
+            self.model = SGD_UKRR_PGP
+        if self.model_string=='SGD_krr_pgp':
+            self.model = SGD_KRR_PGP
 
 
     def load_and_split_data(self):
-        l=np.load(self.dataset_string+'/l_processed.npy',allow_pickle=True)
-        r=np.load(self.dataset_string+'/r_processed.npy',allow_pickle=True)
-        y=np.load(self.dataset_string+'/y.npy',allow_pickle=True)
-        if self.model_string in ['SGD_ukrr','krr_user']:
-            u = np.load(self.dataset_string + '/u.npy',allow_pickle=True)
+        l_load=np.load(self.dataset_string+'/l_processed.npy',allow_pickle=True)
+        r_load=np.load(self.dataset_string+'/r_processed.npy',allow_pickle=True)
+        y_load=np.load(self.dataset_string+'/y.npy',allow_pickle=True)
+        if self.double_up:
+            l = np.concatenate([l_load,r_load],axis=0)
+            r = np.concatenate([r_load,l_load],axis=0)
+            y = np.concatenate([y_load,-1.*y_load],axis=0)
+        else:
+            l = l_load
+            r = r_load
+            y = y_load
+
+        if self.model_string in ['SGD_ukrr','SGD_ukrr_pgp']:
+            u_load = np.load(self.dataset_string + '/u.npy',allow_pickle=True)
+            if self.double_up:
+                u = np.concatenate([u_load,u_load],axis=0)
+            else:
+                u = u_load
             self.ulen=u.shape[1]
             S_u = np.load(self.dataset_string + '/S_u.npy',allow_pickle=True)
             s_u_scaler = StandardScaler()
@@ -203,8 +195,8 @@ class train_GP():
         self.S=torch.from_numpy(S).float()
 
         indices = np.arange(y.shape[0])
-        tr_ind,val_ind,test_ind = StratifiedKFold3(10).split(indices,y)[self.fold]
-        if self.model_string in ['SGD_ukrr','krr_user']:
+        tr_ind,val_ind,test_ind = StratifiedKFold3(n_splits=10,shuffle=True,random_state=1337).split(indices,y)[self.fold]
+        if self.model_string in ['SGD_ukrr','krr_user','SGD_ukrr_pgp']:
             scaler_u = StandardScaler()
             self.tr_u = scaler_u.fit_transform(u[tr_ind])
             self.val_u = scaler_u.transform(u[val_ind])
@@ -225,7 +217,7 @@ class train_GP():
         self.y_val = y[val_ind]
         self.y_test = y[test_ind]
 
-        if self.model_string in ['SGD_ukrr','krr_user']:
+        if self.model_string in ['SGD_ukrr','krr_user','SGD_ukrr_pgp']:
             self.X_tr = np.concatenate([self.tr_u,self.left_tr, self.right_tr], axis=1)
             self.X_val = np.concatenate([self.val_u,self.left_val, self.right_val], axis=1)
             self.X_test = np.concatenate([self.test_u,self.left_test, self.right_test], axis=1)
@@ -238,21 +230,6 @@ class train_GP():
         self.dataset.set('train')
         self.dataloader= custom_dataloader(self.dataset,batch_size=self.bs)
 
-
-    def full_gp_loop(self,optimizer,mll):
-        self.model.train()
-        self.likelihood.train()
-        optimizer.zero_grad()
-        # Output from model
-        X = self.dataset.train_X.to(self.device)
-        y= self.dataset.train_y.to(self.device)
-        output = self.model(X)
-        # Calc loss and backprop gradients
-        loss = -mll(output, y)
-        loss.backward()
-        optimizer.step()
-        return loss.item(),self.model.covar_module.base_kernel.lengthscale.item(),self.model.likelihood.noise.item()
-
     def SGD_krr_loop(self):
         train_X=self.dataloader.dataset.train_X
         train_y=self.dataloader.dataset.train_y
@@ -261,17 +238,17 @@ class train_GP():
         test_X=self.dataloader.dataset.test_X
         test_y=self.dataloader.dataset.test_y
 
-        if self.model_string=='SGD_ukrr':
+        if self.model_string in ['SGD_ukrr','SGD_ukrr_pgp']:
             base_ls_i = get_median_ls(train_X[:,self.ulen:])
             base_ls_u = get_median_ls(train_X[:,:self.ulen])
             inp = (base_ls_u,base_ls_i,self.ulen)
         else:
             inp = get_median_ls(train_X)
-        best_model,best_val,best_test = self.model(train_X, train_y, val_X, val_y, test_X, test_y, inp, 1e-5)
+        best_model,best_tr,best_val,best_test = self.model(train_X, train_y, val_X, val_y, test_X, test_y, inp, 1e-5,self.m)
         alpha = best_model.get_alpha()
-        if self.model_string=='SGD_ukrr':
+        if self.model_string in ['SGD_ukrr','SGD_ukrr_pgp']:
             ind_points_all = best_model.centers.detach().cpu()
-            results = {'test_auc':best_test ,'val_auc':best_val,
+            results = {'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
                        'ls_i':best_model.kernel.lengthscale_items.detach().cpu(),
                        'ls_u':best_model.kernel.lengthscale_users.detach().cpu(),
                        'lamb':best_model.penalty.detach().cpu(),
@@ -280,129 +257,21 @@ class train_GP():
                        'inducing_points_u':ind_points_all[:,:self.ulen],
                        }
         else:
-            results = {'test_auc':best_test ,'val_auc':best_val,
+            results = {'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
                        'ls':best_model.kernel.lengthscale.detach().cpu(),
                        'lamb':best_model.penalty.detach().cpu(),
                        'alpha':alpha.cpu(),
                        'inducing_points':best_model.centers.detach().cpu()}
         return results
 
-    def full_krr_loop(self):
-
-        train_X=self.dataloader.dataset.train_X
-        train_y=self.dataloader.dataset.train_y
-        val_X=self.dataloader.dataset.val_X
-        val_y=self.dataloader.dataset.val_y
-        test_X=self.dataloader.dataset.test_X
-        test_y=self.dataloader.dataset.test_y
-
-        base_ls  = get_median_ls(train_X)
-        if self.model_string=='krr_user':
-            base_ls_2=get_median_ls(train_X[:self.ulen])
-
-        val_scores = []
-        test_scores = []
-        params=[]
-        model_list = []
-        lambdas =np.linspace(1e-5,1,25)
-        factors =np.linspace(0.25,2,25)
-        for l in lambdas:
-            for f in factors:
-                if self.model_string=='krr_user':
-                    inp=(base_ls_2*f,base_ls*f,self.ulen)
-                else:
-                    inp=base_ls*f
-
-                model,val_score,test_score = self.model(train_X,train_y,val_X,val_y,test_X,test_y,inp,l)
-                val_scores.append(val_score)
-                test_scores.append(test_score)
-                model_list.append(model)
-                params.append([base_ls*f,l])
-        best_ind=np.argmax(test_scores)
-        best_test=test_scores[best_ind]
-        best_val=val_scores[best_ind]
-        best_params=params[best_ind]
-        best_model = model_list[best_ind]
-
-        results = {'test_auc':best_test ,'val_auc':best_val,'ls':best_params[0],'lamb':best_params[1],'model':best_model,'alpha':best_model.alpha_,'inducing_points':best_model.ny_points_}
-        return results
-
-    def full_approx_loop(self,optimizer,mll):
-        self.model.train()
-        self.likelihood.train()
-        self.dataloader.dataset.set('train')
-        pbar = tqdm.tqdm(self.dataloader)
-        for i, (x_batch, y_batch) in enumerate(pbar):
-            x_batch = x_batch.to(self.device)
-            y_batch = y_batch.to(self.device)
-            optimizer.zero_grad()
-            output= self.model(x_batch)
-            loss = -mll(output, y_batch)
-            loss.backward()
-            optimizer.step()
-
     def train_model(self):
-
-        if self.model_string in ['GPGP_exact','PGP_exact','vanilla_exact']:
-            self.model = self.model.to(self.device)
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=0.1)  # Includes GaussianLikelihood parameters
-            mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
-            pbar = tqdm.tqdm(range(self.epochs))
-            for i,j in enumerate(pbar):
-                l,ls,noise=self.full_gp_loop(optimizer,mll)
-                pbar.set_description(f"loss: {l} ls: {ls} noise: {noise}")
-
-        if self.model_string in ['PGP_approx','GPGP_approx','vanilla_approx']:
-            self.model = self.model.to(self.device)
-            optimizer = torch.optim.Adam([
-                {'params': self.model.parameters()},
-                {'params': self.likelihood.parameters()},
-            ], lr=0.01)
-
-            # Our loss object. We're using the VariationalELBO
-            mll = gpytorch.mlls.VariationalELBO(self.likelihood, self.model, num_data=self.dataset.train_y.size(0))
-            pbar = tqdm.tqdm(range(self.epochs))
-            for i,j in enumerate(pbar):
-                self.full_approx_loop(optimizer,mll)
-
-        if self.model_string in ['krr_GPGP','krr_PGP','krr_vanilla','krr_user']:
-            results = self.full_krr_loop()
-            print(results)
-            pickle.dump(results,
-                        open(self.save_dir + f'run_{self.fold}.pickle',
-                             "wb"))
-
-        if self.model_string in ['SGD_krr','SGD_ukrr']:
+        if self.model_string in ['SGD_krr_pgp','SGD_krr','SGD_ukrr','SGD_ukrr_pgp']:
             results = self.SGD_krr_loop()
             print(results)
             pickle.dump(results,
                         open(self.save_dir + f'run_{self.fold}.pickle',
                              "wb"))
 
-    def validate_model(self,mode='val'):
-        if 'exact' in self.model_string:
-
-            self.model.eval()
-            self.likelihood.eval()
-            if mode=='val':
-                test_data= self.dataset.val_X.to(self.device)
-            else:
-                test_data= self.dataset.test_X.to(self.device)
-            with torch.no_grad(), gpytorch.settings.fast_pred_var():
-                observed_pred = self.likelihood(self.model(test_data))
-                mean = observed_pred.mean
-                lower, upper = observed_pred.confidence_region()
-        else:
-            self.model.eval()
-            self.likelihood.eval()
-            self.dataloader.dataset.set(mode)
-            pbar = tqdm.tqdm(self.dataloader)
-            big_pred=[]
-            with torch.no_grad():
-                for i,(x_batch, y_batch) in enumerate(pbar):
-                    preds = self.model(x_batch)
-                    big_pred.append(preds.cpu())
-            big_pred=torch.cat(big_pred,dim=0)
 
 
 
