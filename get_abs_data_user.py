@@ -45,7 +45,7 @@ if __name__ == '__main__':
                 'model_string': 'SGD_ukrr',  # krr_vanilla
                 'bs': 1000
             }
-            c=train_GP(train_params=train_params, m_fac=1000)
+            c= train_GP(train_params=train_params)
             c.load_and_split_data()
             x, x_prime = torch.from_numpy(c.left_val).float(), torch.from_numpy(c.right_val).float()
             u = torch.from_numpy(c.val_u).float()

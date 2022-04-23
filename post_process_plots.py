@@ -62,12 +62,13 @@ def produce_plots(dirname,data_name,fn):
 
 
 if __name__ == '__main__':
-    dirname = 'False_pokemon_wl'
-    # fns = ['False_pokemon_elastic','False_pokemon_lasso','False_pokemon_ridge']
-    fns = ['False_pokemon_wl_lasso']
-    data_name = 'data_folds'
-    for fn in fns:
-        produce_plots(dirname,data_name,fn)
+    # dirname = 'False_pokemon_wl'
+    for dirname in ['False_chameleon_wl','False_pokemon_wl']:
+        # fns = [f'{dirname}_elastic',f'{dirname}_lasso',f'{dirname}_ridge']
+        fns = [f'{dirname}_lasso']
+        data_name = 'data_folds'
+        for fn in fns:
+            produce_plots(dirname,data_name,fn)
 
     # for ds in ['tennis_data_processed','website_data_user']:
     #     dirname = f'False_{ds}'

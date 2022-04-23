@@ -62,7 +62,7 @@ def get_shapley_vals_swapped(job,model,fold,train_params,num_matches,post_method
     ind_points = best_model['inducing_points'].float()
 
     x_ind_l,x_ind_r  = torch.chunk(ind_points,dim=1,chunks=2)
-    c=train_GP(train_params=train_params, m_fac=1000)
+    c= train_GP(train_params=train_params)
     c.load_and_split_data()
 
     inner_kernel=RBF_multiple_ls(d=x_ind_l.shape[1])
@@ -105,7 +105,7 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     ind_points = best_model['inducing_points'].float()
 
     x_ind_l,x_ind_r  = torch.chunk(ind_points,dim=1,chunks=2)
-    c=train_GP(train_params=train_params, m_fac=1000)
+    c= train_GP(train_params=train_params)
     c.load_and_split_data()
 
     inner_kernel=RBF_multiple_ls(d=x_ind_l.shape[1])

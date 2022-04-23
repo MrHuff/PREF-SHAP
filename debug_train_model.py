@@ -21,13 +21,16 @@ if __name__ == '__main__':
         'model_string':'SGD_krr', #krr_vanilla
         'bs':1000,
         'double_up': True,
+        'm_factor': 5.
     }
-    for method in ['SGD_krr','SGD_krr_pgp']:
-        for ds in ['chameleon_wl']:
+    for ds in [['chameleon_wl',5.0],['pokemon_wl',2.0]]:
+        for method in ['SGD_krr','SGD_krr_pgp']:
             for f in [0,1,2]:
-                train_params['dataset']=ds
+                train_params['dataset']=ds[0]
                 train_params['model_string']=method
                 train_params['fold']=f
-                c=train_GP(train_params=train_params, m_fac=1.0)
+                train_params['m_factor']=ds[1]
+
+                c= train_GP(train_params=train_params)
                 c.train_model()
 

@@ -1,6 +1,6 @@
 import os.path
 import pickle
-
+import dill
 import torch
 
 from GPGP.GP_model import *
@@ -138,7 +138,7 @@ def save_data(data_dir_load,files,u,u_prime,y):
         pickle.dump({ 'X':u,'X_prime':u_prime,'Y':y}, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 class train_GP():
-    def __init__(self, train_params, m_fac=1., device='cuda:0'):
+    def __init__(self, train_params, device='cuda:0'):
         self.device=device
         self.dataset_string = train_params['dataset']
         self.fold = train_params['fold']
@@ -148,7 +148,7 @@ class train_GP():
         self.model_string = train_params['model_string']
         self.bs = train_params['bs']
         self.save_dir = f'{self.dataset_string}_results/{self.model_string}/'
-        self.m=m_fac
+        self.m=train_params['m_factor']
         self.load_and_split_data()
         self.init_model()
 
@@ -248,7 +248,8 @@ class train_GP():
         alpha = best_model.get_alpha()
         if self.model_string in ['SGD_ukrr','SGD_ukrr_pgp']:
             ind_points_all = best_model.centers.detach().cpu()
-            results = {'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
+            results = {'model':best_model,
+                        'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
                        'ls_i':best_model.kernel.lengthscale_items.detach().cpu(),
                        'ls_u':best_model.kernel.lengthscale_users.detach().cpu(),
                        'lamb':best_model.penalty.detach().cpu(),
@@ -257,7 +258,8 @@ class train_GP():
                        'inducing_points_u':ind_points_all[:,:self.ulen],
                        }
         else:
-            results = {'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
+            results = {'model':best_model,
+                'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
                        'ls':best_model.kernel.lengthscale.detach().cpu(),
                        'lamb':best_model.penalty.detach().cpu(),
                        'alpha':alpha.cpu(),
@@ -267,8 +269,8 @@ class train_GP():
     def train_model(self):
         if self.model_string in ['SGD_krr_pgp','SGD_krr','SGD_ukrr','SGD_ukrr_pgp']:
             results = self.SGD_krr_loop()
-            print(results)
-            pickle.dump(results,
+            model_copy = dill.dumps(results)
+            pickle.dump(model_copy,
                         open(self.save_dir + f'run_{self.fold}.pickle',
                              "wb"))
 
