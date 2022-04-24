@@ -15,7 +15,8 @@ def cumsum_thingy_2(cumsum_indices,shapley_vals):
 
 def process_data(x,x_prime,job,case,f):
     sum_count, features_names, do_sum, coeffs = return_feature_names(job, case=case)
-    diff_abs = np.abs(x - x_prime)
+    # diff_abs = np.abs(x - x_prime)
+    diff_abs = x - x_prime
     data = cumsum_thingy_2(sum_count, diff_abs)
     df = pd.DataFrame(data, columns=features_names)
     df['fold'] = f
@@ -31,7 +32,7 @@ if __name__ == '__main__':
     interventional = False
     folds = [0, 1, 2]
     num_matches = -1
-    for j in ['website_data_user', 'tennis_data_processed']:
+    for j in ['tennis_data_processed_wl','website_user_data_wl']:
         job = j
         model = 'SGD_ukrr'
         data_container = []
@@ -43,7 +44,9 @@ if __name__ == '__main__':
                 'epochs': 100,
                 'patience': 5,
                 'model_string': 'SGD_ukrr',  # krr_vanilla
-                'bs': 1000
+                'bs': 1000,
+                'double_up': False,
+                'm_factor': 5.
             }
             c= train_GP(train_params=train_params)
             c.load_and_split_data()
@@ -53,8 +56,6 @@ if __name__ == '__main__':
             shap_l, shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
             df = process_data(shap_l,shap_r,job,2,f)
             df_u = process_data_u(u_shap,j,1,f)
-
-
             data_container.append(df)
             data_container_u.append(df_u)
         big_df = pd.concat(data_container,axis=0).reset_index(drop=True)

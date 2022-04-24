@@ -34,7 +34,7 @@ def produce_plots(dirname,data_name,fn):
     if not os.path.exists(savedir):
         os.makedirs(savedir)
 
-    df = pd.read_csv(f'{dirname}/{fn}.csv', index_col=0)
+    df = pd.read_csv(f'{dirname}/{dirname}_{fn}.csv', index_col=0)
     data = pd.read_csv(f'{dirname}/{data_name}.csv', index_col=0)
     piv_df, cols = pivot(df)
 
@@ -47,11 +47,11 @@ def produce_plots(dirname,data_name,fn):
         shap_values = shap.Explanation(values=piv_df_lamb[cols].values, feature_names=cols, data=data[cols].values)
         fig = plt.gcf()
         shap.summary_plot(shap_values)
-        fig.savefig(f'{savedir}/bee_plot_lamb={lamb}.png', bbox_inches='tight')
+        fig.savefig(f'{savedir}/bee_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
         fig = plt.gcf()
         shap.plots.bar(shap_values)
-        fig.savefig(f'{savedir}/bar_plot_lamb={lamb}.png', bbox_inches='tight')
+        fig.savefig(f'{savedir}/bar_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
     # vars_data = []
     tmp = df.groupby(['fold', 'd', 'lambda'])['shapley_vals'].var().reset_index()
@@ -63,17 +63,17 @@ def produce_plots(dirname,data_name,fn):
 
 if __name__ == '__main__':
     # dirname = 'False_pokemon_wl'
-    for dirname in ['False_chameleon_wl','False_pokemon_wl']:
-        # fns = [f'{dirname}_elastic',f'{dirname}_lasso',f'{dirname}_ridge']
-        fns = [f'{dirname}_lasso']
-        data_name = 'data_folds'
-        for fn in fns:
-            produce_plots(dirname,data_name,fn)
+    # for dirname in ['False_chameleon_wl','False_pokemon_wl']:
+    #     fns = [f'elastic',f'lasso',f'ridge']
+    #     # fns = [f'{dirname}_lasso']
+    #     data_name = 'data_folds'
+    #     for fn in fns:
+    #         produce_plots(dirname,data_name,fn)
 
-    # for ds in ['tennis_data_processed','website_data_user']:
-    #     dirname = f'False_{ds}'
-    #     for i,user in zip([2,1],['','_user']):
-    #         fns = [f'False_{ds}_elastic_{i}',f'False_{ds}_lasso_{i}',f'False_{ds}_ridge_{i}']
-    #         data_name = 'data_folds' + user
-    #         for fn in fns:
-    #             produce_plots(dirname,data_name,fn)
+    for ds in ['website_user_data_wl','tennis_data_processed_wl']:
+        dirname = f'False_{ds}'
+        for i,user in zip([2,1],['','_user']):
+            fns = [f'elastic_{i}',f'lasso_{i}',f'ridge_{i}']
+            data_name = 'data_folds' + user
+            for fn in fns:
+                produce_plots(dirname,data_name,fn)

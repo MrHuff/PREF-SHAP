@@ -1,2 +1,3 @@
+python debug_train_model_user.py
 python shap_pipeline.py
 python user_shap_pipeline.py

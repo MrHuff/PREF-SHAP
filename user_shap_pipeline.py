@@ -31,7 +31,7 @@ def return_feature_names(job,case=2):
             l1 = np.cumsum(l1).tolist()
             l2 = ['year_of_birth','gender_code_1','gender_code_2','gender_code_0','gender_code_3'
                   ]
-        coeffs= 10**np.linspace(-9,-6,20)
+        coeffs= 10**np.linspace(-9,-3,10)
 
         return l1, l2, True, coeffs
 
@@ -55,7 +55,7 @@ def return_feature_names(job,case=2):
        'tourney_surface_Carpet', 'tourney_surface_Clay',
        'tourney_surface_Grass', 'tourney_surface_Hard']
         # coeffs = [1e-4, 1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
-        coeffs= 10**np.linspace(-9,-5,20)
+        coeffs= 10**np.linspace(-9,-3,10)
 
         return l1, l2, True, coeffs
 
@@ -122,8 +122,8 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     cooking_dict = {'Y':Y_target.cpu(), 'weights':weights.cpu(),'Z':Z.cpu(),
                     'n':shap_l.shape[0]}
     return cooking_dict
-def get_shapley_vals_2(cooking_dict,job,post_method):
-    sum_count,features_names,do_sum,coeffs=return_feature_names(job)
+def get_shapley_vals_2(cooking_dict,job,post_method,case):
+    sum_count,features_names,do_sum,coeffs=return_feature_names(job,case)
     outputs = construct_values(cooking_dict['Y'],cooking_dict['Z'],
                               cooking_dict['weights'],coeffs,post_method
                               )
@@ -171,15 +171,15 @@ if __name__ == '__main__':
                     cooking_dict = get_shapley_vals(job=job,model=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional,case=case)
                     torch.save(cooking_dict,f'{interventional}_{job}/cooking_dict_{f}_{case}.pt')
 
-    # for j in ['tennis_data_processed_wl','website_user_data_wl']:
-    #     for post_method in ['lasso','ridge','elastic']:
-    #         for case in [2,1]:
-    #             big_plt = []
-    #             for f in [0,1,2]:
-    #                 cooking_dict =torch.load(f'{interventional}_{job}/cooking_dict_{f}_{case}.pt')
-    #                 data, features_names = get_shapley_vals_2(cooking_dict, job, post_method)
-    #                 data['fold'] = f
-    #                 big_plt.append(data)
-    #             plot = pd.concat(big_plt, axis=0).reset_index(drop=True)
-    #             plot['d'] = plot['d'].apply(lambda x: features_names[int(x - 1)])
-    #             data.to_csv(f'{interventional}_{job}/{interventional}_{job}_{post_method}_{case}.csv')
+    for job in ['tennis_data_processed_wl','website_user_data_wl']:
+        for post_method in ['lasso','ridge','elastic']:
+            for case in [1,2]:
+                big_plt = []
+                for f in [0,1,2]:
+                    cooking_dict =torch.load(f'{interventional}_{job}/cooking_dict_{f}_{case}.pt')
+                    data, features_names = get_shapley_vals_2(cooking_dict, job, post_method,case)
+                    data['fold'] = f
+                    big_plt.append(data)
+                plot = pd.concat(big_plt, axis=0).reset_index(drop=True)
+                plot['d'] = plot['d'].apply(lambda x: features_names[int(x - 1)])
+                plot.to_csv(f'{interventional}_{job}/{interventional}_{job}_{post_method}_{case}.csv')

@@ -5,7 +5,7 @@ if __name__ == '__main__':
     columns = ['model','data','fold','tr_auc','val_auc','test_auc']
 
     dict_job = [{'data':['chameleon_wl', 'pokemon_wl'] , 'models': ['SGD_krr', 'SGD_krr_pgp']},
-                # {'data':['website_user_data_wl','tennis_data_processed_wl'] ,'models': ['SGD_ukrr','SGD_ukrr_pgp']}
+                {'data':['website_user_data_wl','tennis_data_processed_wl'] ,'models': ['SGD_ukrr','SGD_ukrr_pgp']}
                 ]
     data = []
     for d in dict_job:

@@ -47,8 +47,8 @@ if __name__ == '__main__':
             winners = y * shap_r + (1-y)*shap_l
             loosers = (1-y)*shap_r + y *shap_l
             sum_count,features_names,do_sum,coeffs=return_feature_names(job)
-            diff_abs = np.abs(winners -loosers)
-            # diff_abs = winners -loosers
+            # diff_abs = np.abs(winners -loosers)
+            diff_abs = winners -loosers
             data = cumsum_thingy_2(sum_count,diff_abs)
             df = pd.DataFrame(data,columns=features_names)
             df['fold'] = f

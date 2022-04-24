@@ -112,7 +112,7 @@ if __name__ == '__main__':
             'double_up':False,
             'm_factor':1.0
         }
-        # shutil.rmtree(f'{interventional}_{job}')
+        shutil.rmtree(f'{interventional}_{job}')
         if not os.path.exists(f'{interventional}_{job}'):
             os.makedirs(f'{interventional}_{job}')
         for f in [0,1,2]:
