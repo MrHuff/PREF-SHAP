@@ -24,13 +24,22 @@ def return_feature_names(job):
         coeffs= 10**np.linspace(-7,-2,10)
         return l1,l2,True,coeffs
 
-
-
     if job in ['chameleon','chameleon_wl']:
         l2 = ['ch.res', 'jl.res', 'tl.res', 'mass.res', 'SVL', 'prop.main',
        'prop.patch']
         coeffs= 10**np.linspace(-7,-2,10)
         return [],l2,False,coeffs
+
+    if job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
+        l2 = [f'important_{i}' for i in range(1,3)] + [f'Unimportant_{i}' for i in range(3,11)]
+        coeffs= 10**np.linspace(-7,-2,0)
+        return [],l2,False,coeffs
+    d=[5,3]
+    if job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
+        l2 = [f'important_{i}' for i in range(1,d[1]+1)] + [f'Unimportant_{i}' for i in range(d[1]+1,d[0]+1)]
+        coeffs= 10**np.linspace(-7,-2,0)
+        return [],l2,False,coeffs
+
 
 def cumsum_thingy(cumsum_indices,shapley_vals):
     cat_parts = []
@@ -57,16 +66,14 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     inner_kernel._set_lengthscale(ls)
     inner_kernel=inner_kernel.to('cuda:0')
     alpha=alpha.to('cuda:0')
+
+
+    ps = pref_shap(model=model, alpha=alpha, k=inner_kernel, X_l=x_ind_l, X_r=x_ind_r, X=c.S, max_S=2500,
+                   rff_mode=False, eps=1e-3, cg_max_its=10, lamb=1e-3, max_inv_row=0, cg_bs=25, post_method=post_method,
+                   interventional=interventional, device='cuda:0')
     x,x_prime = torch.from_numpy(c.left_val).float(),torch.from_numpy(c.right_val).float()
-    y_pred  =model.predict(c.dataloader.dataset.val_X.to('cuda:0'))
     if x.shape[0]<100:
         x, x_prime = torch.from_numpy(c.left_tr).float(), torch.from_numpy(c.right_tr).float()
-        y_pred  =model.predict(c.dataloader.dataset.train_X.to('cuda:0'))
-
-    ps = pref_shap(model=model,y_pred=y_pred, alpha=alpha,k=inner_kernel,X_l=x_ind_l,X_r=x_ind_r,X=c.S,max_S=2500,rff_mode=False,
-                   eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=25,post_method=post_method,device='cuda:0',interventional=interventional)
-
-    # num_matches = 100
     shap_l,shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
     Y_target, weights,Z= ps.fit(shap_l,shap_r)
 
@@ -97,7 +104,10 @@ if __name__ == '__main__':
     # d_imp = 2
     # d=10
     # palette =['r']*d_imp+ ['g']*(d-d_imp)
-    for job in ['chameleon_wl','pokemon_wl']:
+    # for job in ['chameleon_wl','pokemon_wl']:
+    # for job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
+    d = [5, 3]
+    for job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
     # for job in ['pokemon_wl']:
         interventional=False
         model='SGD_krr'
@@ -110,21 +120,19 @@ if __name__ == '__main__':
             'model_string':'SGD_krr', #krr_vanilla
             'bs':1000,
             'double_up':False,
-            'm_factor':1.0
+            'm_factor':1.0,
+            'seed': 42,
+            'folds': 10,
         }
-        shutil.rmtree(f'{interventional}_{job}')
         if not os.path.exists(f'{interventional}_{job}'):
             os.makedirs(f'{interventional}_{job}')
-        for f in [0,1,2]:
-            if not os.path.exists(f'{interventional}_{job}/cooking_dict_{f}.pt'):
-                cooking_dict = get_shapley_vals(job=job,model=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional)
-                torch.save(cooking_dict,f'{interventional}_{job}/cooking_dict_{f}.pt')
-    for job in ['chameleon_wl', 'pokemon_wl']:
-    # for job in ['pokemon_wl']:
-        for post_method in ['lasso', 'ridge', 'elastic']:
-        # for post_method in ['lasso']:
+        for f in [0]:
+            # if not os.path.exists(f'{interventional}_{job}/cooking_dict_{f}.pt'):
+            cooking_dict = get_shapley_vals(job=job,model=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional)
+            torch.save(cooking_dict,f'{interventional}_{job}/cooking_dict_{f}.pt')
+        for post_method in ['lasso']:
             big_plt = []
-            for f in [0, 1, 2]:
+            for f in [0]:
             # for f in [0]:
                 cooking_dict = torch.load(f'{interventional}_{job}/cooking_dict_{f}.pt')
                 data,features_names= get_shapley_vals_2(cooking_dict,job,post_method)

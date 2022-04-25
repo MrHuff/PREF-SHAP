@@ -46,7 +46,9 @@ if __name__ == '__main__':
                 'model_string': 'SGD_ukrr',  # krr_vanilla
                 'bs': 1000,
                 'double_up': False,
-                'm_factor': 5.
+                'm_factor': 5.,
+                'seed': 42,
+                'folds': 10,
             }
             c= train_GP(train_params=train_params)
             c.load_and_split_data()

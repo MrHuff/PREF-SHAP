@@ -62,7 +62,22 @@ def produce_plots(dirname,data_name,fn):
 
 
 if __name__ == '__main__':
-    # dirname = 'False_pokemon_wl'
+    # d=[10,5]
+    # for dirname in [f'local_hard_data_10000_1000_{d[0]}_{d[1]}']:
+    for dirname in ['local_pokemon_wl']:
+        fns = [f'lasso']
+        data_name = 'data_folds'
+        for fn in fns:
+            produce_plots(dirname,data_name,fn)
+
+
+    # for dirname in [ 'False_alan_data_5000_1000_10_10','False_toy_data_5000_10_2']:
+    #     # fns = [f'elastic',f'lasso',f'ridge']
+    #     fns = [f'lasso']
+    #     data_name = 'data_folds'
+    #     for fn in fns:
+    #         produce_plots(dirname,data_name,fn)
+
     # for dirname in ['False_chameleon_wl','False_pokemon_wl']:
     #     fns = [f'elastic',f'lasso',f'ridge']
     #     # fns = [f'{dirname}_lasso']
@@ -70,10 +85,10 @@ if __name__ == '__main__':
     #     for fn in fns:
     #         produce_plots(dirname,data_name,fn)
 
-    for ds in ['website_user_data_wl','tennis_data_processed_wl']:
-        dirname = f'False_{ds}'
-        for i,user in zip([2,1],['','_user']):
-            fns = [f'elastic_{i}',f'lasso_{i}',f'ridge_{i}']
-            data_name = 'data_folds' + user
-            for fn in fns:
-                produce_plots(dirname,data_name,fn)
+    # for ds in ['website_user_data_wl','tennis_data_processed_wl']:
+    #     dirname = f'False_{ds}'
+    #     for i,user in zip([2,1],['','_user']):
+    #         fns = [f'elastic_{i}',f'lasso_{i}',f'ridge_{i}']
+    #         data_name = 'data_folds' + user
+    #         for fn in fns:
+    #             produce_plots(dirname,data_name,fn)

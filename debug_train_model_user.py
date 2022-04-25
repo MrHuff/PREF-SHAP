@@ -21,9 +21,11 @@ if __name__ == '__main__':
         'model_string':'SGD_ukrr', #krr_vanilla
         'bs':1000,
         'double_up':True,
-        'm_factor': 5.
+        'm_factor': 5.,
+        'seed':2,
+        'folds':5,
     }
-    for ds in [['tennis_data_processed_wl',1.5],['website_user_data_wl',5.0]]:
+    for ds in [['tennis_data_processed_wl',2.0],['website_user_data_wl',2.0]]:
         for method in ['SGD_ukrr','SGD_ukrr_pgp']:
             for f in [0,1,2]:
                 train_params['dataset']=ds[0]

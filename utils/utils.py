@@ -149,6 +149,8 @@ class train_GP():
         self.bs = train_params['bs']
         self.save_dir = f'{self.dataset_string}_results/{self.model_string}/'
         self.m=train_params['m_factor']
+        self.seed = train_params['seed']
+        self.folds = train_params['folds']
         self.load_and_split_data()
         self.init_model()
 
@@ -195,7 +197,7 @@ class train_GP():
         self.S=torch.from_numpy(S).float()
 
         indices = np.arange(y.shape[0])
-        tr_ind,val_ind,test_ind = StratifiedKFold3(n_splits=10,shuffle=True,random_state=1337).split(indices,y)[self.fold]
+        tr_ind,val_ind,test_ind = StratifiedKFold3(n_splits=self.folds,shuffle=True,random_state=self.seed).split(indices,y)[self.fold]
         if self.model_string in ['SGD_ukrr','krr_user','SGD_ukrr_pgp']:
             scaler_u = StandardScaler()
             self.tr_u = scaler_u.fit_transform(u[tr_ind])
@@ -229,6 +231,11 @@ class train_GP():
         self.dataset=general_dataset(X_tr=self.X_tr,y_tr=self.y_tr,X_val=self.X_val,y_val=self.y_val,X_test=self.X_test,y_test=self.y_test)
         self.dataset.set('train')
         self.dataloader= custom_dataloader(self.dataset,batch_size=self.bs)
+
+        self.tr_ind = tr_ind
+        self.val_ind = val_ind
+        self.test_ind = test_ind
+
 
     def SGD_krr_loop(self):
         train_X=self.dataloader.dataset.train_X

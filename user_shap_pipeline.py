@@ -14,7 +14,7 @@ sns.set()
 def return_feature_names(job,case=2):
     if job in ['website_data_user','website_user_data_wl']:
         if case==2:
-            l1=[2, 2, 32, 29, 5, 23]
+            l1=[2, 2, 32, 29, 5, 23] #redo top 10 featuers only
             l1.insert(0,0)
             l1=np.cumsum(l1).tolist()
 
@@ -103,19 +103,19 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     inner_kernel_u=inner_kernel_u.to('cuda:0')
     alpha=alpha.to('cuda:0')
 
-    x,x_prime = torch.from_numpy(c.left_val).float(),torch.from_numpy(c.right_val).float()
-    y_pred  =model.predict(c.dataloader.dataset.val_X.to('cuda:0'))
+
+
+    ps = pref_shap(model=model, alpha=alpha, k=inner_kernel, X_l=x_ind_l, X_r=x_ind_r, X=c.S, k_U=inner_kernel_u, u=x_u,
+                   X_U=c.S_u, max_S=2500, rff_mode=False, eps=1e-3, cg_max_its=10, lamb=1e-3, max_inv_row=2500, cg_bs=5,
+                   post_method=post_method, interventional=interventional, device='cuda:0')
+
+    x, x_prime = torch.from_numpy(c.left_val).float(), torch.from_numpy(c.right_val).float()
     u = torch.from_numpy(c.val_u).float()
-    if x.shape[0]<100:
+    if x.shape[0] < 100:
         x, x_prime = torch.from_numpy(c.left_tr).float(), torch.from_numpy(c.right_tr).float()
-        y_pred  =model.predict(c.dataloader.dataset.train_X.to('cuda:0'))
         u = torch.from_numpy(c.tr_u).float()
-    u_shap = u[0:num_matches,:]
-    shap_l,shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
-
-    ps = pref_shap(model=model,y_pred=y_pred,alpha=alpha,k=inner_kernel,X_l=x_ind_l,X_r=x_ind_r,X=c.S,u=x_u,k_U=inner_kernel_u,X_U=c.S_u,max_S=2500,rff_mode=False,
-                   eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=2500,cg_bs=5,post_method=post_method,device='cuda:0',interventional=interventional)
-
+    u_shap = u[0:num_matches, :]
+    shap_l, shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
 
     Y_target, weights,Z= ps.fit(shap_l,shap_r,u_shap,case)
 

@@ -18,7 +18,11 @@ def cumsum_thingy_2(cumsum_indices,shapley_vals):
 if __name__ == '__main__':
     interventional = False
     model = 'SGD_krr'
-    for job in ['chameleon_wl','pokemon_wl']:
+
+    d=[5,3]
+    for job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
+    # for job in [ 'alan_data_5000_1000_10_10','toy_data_5000_10_2']:
+    # for job in ['chameleon_wl','pokemon_wl']:
         data_container = []
         num_matches= -1
         # for f in [0, 1, 2]:
@@ -31,7 +35,10 @@ if __name__ == '__main__':
                 'model_string': 'SGD_krr',  # krr_vanilla
                 'bs': 1000,
                 'double_up':False,
-                'm_factor':1.0
+                'm_factor':1.0,
+                'seed':42,
+                'folds': 10,
+
             }
             c= train_GP(train_params=train_params)
             c.load_and_split_data()
@@ -50,7 +57,7 @@ if __name__ == '__main__':
             # diff_abs = np.abs(winners -loosers)
             diff_abs = winners -loosers
             data = cumsum_thingy_2(sum_count,diff_abs)
-            df = pd.DataFrame(data,columns=features_names)
+            df = pd.DataFrame(data.numpy(),columns=features_names)
             df['fold'] = f
             data_container.append(df)
         big_df = pd.concat(data_container,axis=0).reset_index(drop=True)

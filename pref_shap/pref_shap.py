@@ -120,11 +120,12 @@ def sample_Z(D,max_S):
         return base_2_base_10(max_S, D)
 
 class pref_shap():
-    def __init__(self,model,y_pred,alpha,k,X_l,X_r,X,k_U=None,u=None,X_U=None,max_S: int=5000,rff_mode=False,eps=1e-3,cg_max_its=10,lamb=1e-3,max_inv_row=0,cg_bs=20,post_method='OLS',interventional=False,device='cuda:0'):
+    def __init__(self, model, alpha, k, X_l, X_r, X, k_U=None, u=None, X_U=None, max_S: int = 5000, rff_mode=False,
+                 eps=1e-3, cg_max_its=10, lamb=1e-3, max_inv_row=0, cg_bs=20, post_method='OLS', interventional=False,
+                 device='cuda:0'):
         if max_inv_row >0:
             X = X[torch.randperm(X.shape[0])[:max_inv_row],:]
         self.model=model
-        self.y_pred_mean = y_pred.mean().item()
         self.post_method=post_method
         self.alpha = alpha.t()
         self.cg_bs=cg_bs
@@ -150,23 +151,28 @@ class pref_shap():
         self.N_x,self.m = self.X_U.shape
         self.reg = self.N_x*self.lamb
         self.eye = torch.eye(self.N_x).to(self.device)*self.reg
-        self.precond = torch.inverse(self.k_U(self.X_U)+ self.eye)
+        L = torch.linalg.cholesky(self.k_U(self.X_U)+ self.eye)
+        self.precond = torch.cholesky_inverse(L)
+
         self.setup_the_rest()
 
     def setup_the_rest(self):
         self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=self.eps,maxits=self.cg_max_its,device=self.device)
-        self.Z = torch.from_numpy(sample_Z(self.m,self.max_S)).float().to(self.device)
+        Z = torch.from_numpy(sample_Z(self.eff_dim,self.max_S)).float().to(self.device)
+        # self.m = self.eff_dim
         const = torch.lgamma(torch.tensor(self.m) + 1)
-        abs_S = self.Z.sum(1)
-        a = torch.exp(const - torch.lgamma((self.m - abs_S) + 1) - torch.lgamma(abs_S + 1))
-        self.weights = (self.m - 1) / (a * (abs_S) * (self.m - abs_S))
+        abs_S = Z.sum(1)
+        a = torch.exp(const - torch.lgamma((self.eff_dim - abs_S) + 1) - torch.lgamma(abs_S + 1))
+        self.weights = (self.m - 1) / (a * (abs_S) * (self.eff_dim - abs_S))
         bool = torch.isfinite(self.weights.squeeze())
         # edge_vals = torch.sum(self.weights[bool]).unsqueeze(0).to(self.device)
-        edge_vals = torch.tensor([1e6]).float().to(self.device)
+        edge_vals = torch.tensor([1e5]).float().to(self.device)
         middle_weights = self.weights[bool]
         middle_weights = middle_weights /middle_weights.sum()
-        middle_Z = self.Z[bool,:]
-        self.Z=torch.concat([torch.zeros(1, self.m).to(self.device), middle_Z,torch.ones(1, self.m).to(self.device)], dim=0)
+        middle_Z = Z[bool,:]
+        Z = torch.concat([torch.zeros(1, self.eff_dim).to(self.device), middle_Z,torch.ones(1, self.eff_dim).to(self.device)], dim=0)
+        self.Z = torch.zeros(Z.shape[0],self.m).to(self.device)
+        self.Z[:,self.mask] = Z
         self.weights = torch.concat([edge_vals,middle_weights,edge_vals],dim=0)
         self.weights=self.weights.unsqueeze(-1)
         self.batched_Z = torch.chunk(self.Z,self.Z.shape[0]//self.cg_bs,dim=0)
@@ -175,7 +181,8 @@ class pref_shap():
         self.N_x,self.m = self.X.shape
         self.reg = self.N_x*self.lamb
         self.eye = torch.eye(self.N_x).to(self.device)*self.reg
-        self.precond = torch.inverse(self.k(self.X)+ self.eye)
+        L = torch.linalg.cholesky(self.k(self.X)+ self.eye)
+        self.precond = torch.cholesky_inverse(L)
         self.setup_the_rest()
 
     # def weighted_moore_penrose(self):
@@ -293,13 +300,10 @@ class pref_shap():
         user_k = self.k_U(self.u,u)
         output = user_k*output
         return output,first_flag,last_flag
-    def flag_adjustment(self,first_flag,last_flag,output,x,x_prime,u=None):
-        if u is not None:
-            tmp = torch.cat([u,x,x_prime],dim=1)
-        else:
-            tmp = torch.cat([x,x_prime],dim=1)
+    def flag_adjustment(self, first_flag, last_flag, output):
+
         if first_flag:
-            y_preds  = self.model.predict(tmp) - self.y_pred_mean
+            y_preds  = self.y_pred - self.y_pred_mean
             if len(output.shape)==1:
                 output = torch.cat([ y_preds.squeeze(0),output],dim=0)
             else:
@@ -324,29 +328,47 @@ class pref_shap():
             elif case == 2:
                 output, first_flag, last_flag = self.kernel_tensor_batch_user_case_2(u, S_batch, x, x_prime)
         output = (self.alpha@output).squeeze() - self.y_pred_mean
-        return self.flag_adjustment(first_flag,last_flag,output,x,x_prime,u)
+        return self.flag_adjustment(first_flag, last_flag, output)
 
     def fit(self,x,x_prime,u=None,case=2):
         x=x.to(self.device)
         x_prime=x_prime.to(self.device)
         if u is not None:
+            tmp = torch.cat([u,x,x_prime],dim=1)
             u = u.to(self.device)
             if case==1:
+                self.mask = (u.var(0) > 0).cpu()
+                self.eff_dim = self.mask.sum().item()
                 self.setup_user_vals()
             else:
+                self.mask = ((x.var(0) + x_prime.var(0)) > 0).cpu()
+                self.eff_dim = self.mask.sum().item()
                 self.setup_item_vals()
         else:
+            self.mask = ((x.var(0) + x_prime.var(0)) > 0).cpu()
+            self.eff_dim = self.mask.sum().item()
+            tmp = torch.cat([x,x_prime],dim=1)
             self.setup_item_vals()
+
+        self.y_pred = self.model.predict(tmp)
+        self.y_pred_mean = self.y_pred.mean().item()
+
         Y_target = []
         for batch in tqdm(self.batched_Z):
             Y_target.append(self.value_observation(batch,x,x_prime,u,case))
         Y_cat = torch.cat(Y_target, dim=0)
         return Y_cat,self.weights,self.Z
 
-def OLS_solve(Y_target,Z,weights):
+def OLS_solve(Y_target,Z_in,weights):
+    mask = Z_in.sum(0)>0
+    shapley_vals = torch.zeros(Z_in.shape[1],Y_target.shape[1])
+    Z = Z_in[:,mask]
     b = Z.t()@Y_target
     A = Z.t()@(Z*weights)
-    return torch.linalg.solve(A,b)
+    L = torch.linalg.cholesky(A)
+    sol = torch.cholesky_solve(b,L)
+    shapley_vals[mask,:] = sol
+    return shapley_vals
 
 def construct_values(Y_cat,Z,weights,coeffs,post_method):
     if len(Y_cat.shape) == 1:
