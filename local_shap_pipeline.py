@@ -39,8 +39,8 @@ def cumsum_thingy(cumsum_indices,shapley_vals):
     p_output = torch.cat(cat_parts,dim=0)
     return p_output
 
-def get_shapley_vals(job,model,fold,post_method,interventional,shap_l,shap_r):
-    with open( f'{job}_results/{model}/run_{fold}.pickle' , 'rb') as handle:
+def get_shapley_vals(job,model_string,fold,post_method,interventional,shap_l,shap_r):
+    with open( f'{job}_results/{model_string}/run_{fold}.pickle' , 'rb') as handle:
         loaded_model = pickle.load(handle)
     best_model = dill.loads(loaded_model)
     ls = best_model['ls']
@@ -135,46 +135,47 @@ if __name__ == '__main__':
     # d=[13,24] #water v fire
     # d=[17,10] #electric v ground
     # d=[12,19] #Normal, Fightning
-    d=[18,14] #Electric vs Flying
-
-    # for job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
-    for job in ['pokemon_wl']:
-        interventional=False
-        model='SGD_krr'
-        fold=0
-        train_params={
-            'dataset':job,
-            'fold':fold,
-            'epochs':100,
-            'patience':5,
-            'model_string':'SGD_krr', #krr_vanilla
-            'bs':1000,
-            'double_up':False,
-            'm_factor':2.0,
-            'seed': 42,
-            'folds': 10,
-        }
-        if not os.path.exists(f'local_{job}'):
-            os.makedirs(f'local_{job}')
-        for f in [0]:
-            left,right,dat_abs = hard_data_get_vals(train_params,d)
-            cooking_dict = get_shapley_vals(job=job,model=model,fold=fold,post_method='OLS',
-                                            interventional=interventional,
-                                            shap_l=left,
-                                            shap_r=right
-                                            )
-            torch.save(cooking_dict,f'local_{job}/cooking_dict_{f}.pt')
-            dat_abs.to_csv(f'local_{job}/data_folds.csv')
-    # for job in ['pokemon_wl','hard_data_10000_1000_10_10']:
-        for post_method in ['lasso']:
-            big_plt = []
+    # d=[18,14] #Electric vs Flying
+    # d=[16,13] #Grass fire
+    for d in [[13,24],[17,10],[12,19],[16,13],[10,14],[18,9],[18,14]]:
+        for job in ['pokemon_wl']:
+            interventional=False
+            model='SGD_krr_pgp'
+            fold=0
+            train_params={
+                'dataset':job,
+                'fold':fold,
+                'epochs':100,
+                'patience':5,
+                'model_string':'SGD_krr_pgp', #krr_vanilla
+                'bs':1000,
+                'double_up':False,
+                'm_factor':2.0,
+                'seed': 42,
+                'folds': 10,
+            }
+            res_name = f'local_{job}_{d}_{model}'
+            if not os.path.exists(f'{res_name}'):
+                os.makedirs(f'{res_name}')
             for f in [0]:
-                cooking_dict = torch.load(f'local_{job}/cooking_dict_{f}.pt')
-                data,features_names= get_shapley_vals_2(cooking_dict,job,post_method,d)
-                data['fold']=f
-                big_plt.append(data)
-            plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
-            plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-            plot.to_csv(f'local_{job}/local_{job}_{post_method}.csv')
+                left,right,dat_abs = hard_data_get_vals(train_params,d)
+                cooking_dict = get_shapley_vals(job=job,model_string=model,fold=fold,post_method='OLS',
+                                                interventional=interventional,
+                                                shap_l=left,
+                                                shap_r=right
+                                                )
+                torch.save(cooking_dict,f'{res_name}/cooking_dict_{f}.pt')
+                dat_abs.to_csv(f'{res_name}/data_folds.csv')
+        # for job in ['pokemon_wl','hard_data_10000_1000_10_10']:
+            for post_method in ['lasso']:
+                big_plt = []
+                for f in [0]:
+                    cooking_dict = torch.load(f'{res_name}/cooking_dict_{f}.pt')
+                    data,features_names= get_shapley_vals_2(cooking_dict,job,post_method,d)
+                    data['fold']=f
+                    big_plt.append(data)
+                plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
+                plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+                plot.to_csv(f'{res_name}/{res_name}_{post_method}.csv')
 
 

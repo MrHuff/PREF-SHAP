@@ -11,6 +11,17 @@ import shutil
 import dill
 sns.set()
 
+def cumsum_thingy_2(cumsum_indices,shapley_vals):
+    if cumsum_indices:
+        cat_parts = []
+        for i in range(len(cumsum_indices)-1):
+            part = shapley_vals[:,cumsum_indices[i]:cumsum_indices[i+1]].sum(1,keepdim=True)
+            cat_parts.append(part)
+        p_output = torch.cat(cat_parts,dim=1)
+        return p_output
+    else:
+        return shapley_vals
+
 def return_feature_names(job):
     if job in ['pokemon','pokemon_wl']:
         l1= [1,1,1,1,1,1,1,19]
@@ -21,13 +32,13 @@ def return_feature_names(job):
        # 'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
        # 'Psychic', 'Rock', 'Steel', 'Water']
         l2=['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary','Type']
-        coeffs= 10**np.linspace(-7,-2,10)
+        coeffs= 10**np.linspace(-7,-2,0)
         return l1,l2,True,coeffs
 
     if job in ['chameleon','chameleon_wl']:
         l2 = ['ch.res', 'jl.res', 'tl.res', 'mass.res', 'SVL', 'prop.main',
        'prop.patch']
-        coeffs= 10**np.linspace(-7,-2,10)
+        coeffs= 10**np.linspace(-7,-2,0)
         return [],l2,False,coeffs
 
     if job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
@@ -49,9 +60,11 @@ def cumsum_thingy(cumsum_indices,shapley_vals):
     p_output = torch.cat(cat_parts,dim=0)
     return p_output
 
-def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interventional):
-    with open( f'{job}_results/{model}/run_{fold}.pickle' , 'rb') as handle:
+def get_shapley_vals(job,model_string,fold,train_params,num_matches,post_method,interventional):
+    with open( f'{job}_results/{model_string}/run_{fold}.pickle' , 'rb') as handle:
         loaded_model = pickle.load(handle)
+
+    pgp = model_string=='SGD_krr_pgp'
     best_model = dill.loads(loaded_model)
     ls = best_model['ls']
     alpha = best_model['alpha'].float()
@@ -66,21 +79,30 @@ def get_shapley_vals(job,model,fold,train_params,num_matches,post_method,interve
     inner_kernel._set_lengthscale(ls)
     inner_kernel=inner_kernel.to('cuda:0')
     alpha=alpha.to('cuda:0')
-
-
     ps = pref_shap(model=model, alpha=alpha, k=inner_kernel, X_l=x_ind_l, X_r=x_ind_r, X=c.S, max_S=2500,
                    rff_mode=False, eps=1e-3, cg_max_its=10, lamb=1e-3, max_inv_row=0, cg_bs=25, post_method=post_method,
                    interventional=interventional, device='cuda:0')
     x,x_prime = torch.from_numpy(c.left_val).float(),torch.from_numpy(c.right_val).float()
+    y = torch.from_numpy((c.y_val > 0) * 1.0).unsqueeze(-1)
     if x.shape[0]<100:
         x, x_prime = torch.from_numpy(c.left_tr).float(), torch.from_numpy(c.right_tr).float()
+        y = torch.from_numpy((c.y_tr > 0) * 1.0).unsqueeze(-1)
+
     shap_l,shap_r = x[0:num_matches, :], x_prime[0:num_matches, :]
-    Y_target, weights,Z= ps.fit(shap_l,shap_r)
+    y = y[0:num_matches]
+    Y_target, weights,Z= ps.fit(shap_l,shap_r,pgp=pgp)
 
     cooking_dict = {'Y':Y_target.cpu(), 'weights':weights.cpu(),'Z':Z.cpu(),
                     'n':shap_l.shape[0]}
 
-    return cooking_dict
+    winners = y * shap_r + (1 - y) * shap_l
+    loosers = (1 - y) * shap_r + y * shap_l
+    sum_count, features_names, do_sum, coeffs = return_feature_names(job)
+    diff_abs = winners - loosers
+    data = cumsum_thingy_2(sum_count, diff_abs)
+    df = pd.DataFrame(data.numpy(), columns=features_names)
+    df['fold'] = f
+    return cooking_dict,df
 
 
 def get_shapley_vals_2(cooking_dict,job,post_method):
@@ -105,9 +127,9 @@ if __name__ == '__main__':
     # d=10
     # palette =['r']*d_imp+ ['g']*(d-d_imp)
     # for job in ['chameleon_wl','pokemon_wl']:
-    # for job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
-    d = [5, 3]
-    for job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
+    for job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
+    # d = [5, 3]
+    # for job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
     # for job in ['pokemon_wl']:
         interventional=False
         model='SGD_krr'
@@ -117,29 +139,34 @@ if __name__ == '__main__':
             'fold':fold,
             'epochs':100,
             'patience':5,
-            'model_string':'SGD_krr', #krr_vanilla
+            'model_string':model, #krr_vanilla
             'bs':1000,
             'double_up':False,
             'm_factor':1.0,
             'seed': 42,
             'folds': 10,
         }
-        if not os.path.exists(f'{interventional}_{job}'):
-            os.makedirs(f'{interventional}_{job}')
+        res_name = f'{interventional}_{job}_{model}'
+        if not os.path.exists(f'{res_name}'):
+            os.makedirs(f'{res_name}')
+        abs_data_container = []
         for f in [0]:
             # if not os.path.exists(f'{interventional}_{job}/cooking_dict_{f}.pt'):
-            cooking_dict = get_shapley_vals(job=job,model=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional)
-            torch.save(cooking_dict,f'{interventional}_{job}/cooking_dict_{f}.pt')
+            cooking_dict,abs_data = get_shapley_vals(job=job,model_string=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional)
+            abs_data_container.append(abs_data)
+            torch.save(cooking_dict,f'{res_name}/cooking_dict_{f}.pt')
+        big_df = pd.concat(abs_data_container,axis=0).reset_index(drop=True)
+        big_df.to_csv(f'{res_name}/data_folds.csv')
         for post_method in ['lasso']:
             big_plt = []
             for f in [0]:
             # for f in [0]:
-                cooking_dict = torch.load(f'{interventional}_{job}/cooking_dict_{f}.pt')
+                cooking_dict = torch.load(f'{res_name}/cooking_dict_{f}.pt')
                 data,features_names= get_shapley_vals_2(cooking_dict,job,post_method)
                 data['fold']=f
                 big_plt.append(data)
             plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
             plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-            plot.to_csv(f'{interventional}_{job}/{interventional}_{job}_{post_method}.csv')
+            plot.to_csv(f'{res_name}/{res_name}_{post_method}.csv')
 
 

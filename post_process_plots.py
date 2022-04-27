@@ -42,15 +42,18 @@ def produce_plots(dirname,data_name,fn):
     data = data[data['fold'] == 0]
     lambs = piv_df['lambda'].unique().tolist()
 
-    for lamb in lambs:
+    for lamb in [0.0]:
         piv_df_lamb = piv_df[piv_df['lambda'] == lamb]
-        shap_values = shap.Explanation(values=piv_df_lamb[cols].values, feature_names=cols, data=data[cols].values)
+        vals  = piv_df_lamb[cols].values
+        max_norm = np.abs(vals).max()
+        vals = vals/max_norm
+        shap_values = shap.Explanation(values=vals, feature_names=cols, data=data[cols].values)
         fig = plt.gcf()
-        shap.summary_plot(shap_values)
+        shap.summary_plot(shap_values,max_display=15)
         fig.savefig(f'{savedir}/bee_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
         fig = plt.gcf()
-        shap.plots.bar(shap_values)
+        shap.plots.bar(shap_values,max_display=15)
         fig.savefig(f'{savedir}/bar_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
     # vars_data = []
@@ -64,31 +67,33 @@ def produce_plots(dirname,data_name,fn):
 if __name__ == '__main__':
     # d=[10,5]
     # for dirname in [f'local_hard_data_10000_1000_{d[0]}_{d[1]}']:
-    for dirname in ['local_pokemon_wl']:
-        fns = [f'lasso']
-        data_name = 'data_folds'
-        for fn in fns:
-            produce_plots(dirname,data_name,fn)
+    for model in ['SGD_krr','SGD_krr_pgp']:
+        for d in [[13,24],[17,10],[12,19],[16,13],[10,14],[18,9],[18,14]]:
+            for dirname in [f'local_pokemon_wl_{d}_{model}']:
+                fns = [f'lasso']
+                data_name = 'data_folds'
+                for fn in fns:
+                    produce_plots(dirname,data_name,fn)
 
 
-    # for dirname in [ 'False_alan_data_5000_1000_10_10','False_toy_data_5000_10_2']:
+    # for dirname in [ 'False_alan_data_5000_1000_10_10_SGD_krr','False_toy_data_5000_10_2_SGD_krr']:
     #     # fns = [f'elastic',f'lasso',f'ridge']
     #     fns = [f'lasso']
     #     data_name = 'data_folds'
     #     for fn in fns:
     #         produce_plots(dirname,data_name,fn)
 
-    # for dirname in ['False_chameleon_wl','False_pokemon_wl']:
-    #     fns = [f'elastic',f'lasso',f'ridge']
-    #     # fns = [f'{dirname}_lasso']
+    # for dirname in ['False_chameleon_wl','False_pokemon_wl','False_chameleon_wl_SGD_krr_pgp','False_pokemon_wl_SGD_krr_pgp']:
+    #     # fns = [f'elastic',f'lasso',f'ridge']
+    #     fns = [f'lasso']
     #     data_name = 'data_folds'
     #     for fn in fns:
     #         produce_plots(dirname,data_name,fn)
-
+    #
     # for ds in ['website_user_data_wl','tennis_data_processed_wl']:
     #     dirname = f'False_{ds}'
     #     for i,user in zip([2,1],['','_user']):
-    #         fns = [f'elastic_{i}',f'lasso_{i}',f'ridge_{i}']
+    #         fns = [f'lasso_{i}']
     #         data_name = 'data_folds' + user
     #         for fn in fns:
     #             produce_plots(dirname,data_name,fn)

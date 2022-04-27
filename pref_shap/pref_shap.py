@@ -160,10 +160,10 @@ class pref_shap():
         self.tensor_CG = tensor_CG(precond=self.precond,reg=self.reg,eps=self.eps,maxits=self.cg_max_its,device=self.device)
         Z = torch.from_numpy(sample_Z(self.eff_dim,self.max_S)).float().to(self.device)
         # self.m = self.eff_dim
-        const = torch.lgamma(torch.tensor(self.m) + 1)
+        const = torch.lgamma(torch.tensor(self.eff_dim) + 1)
         abs_S = Z.sum(1)
         a = torch.exp(const - torch.lgamma((self.eff_dim - abs_S) + 1) - torch.lgamma(abs_S + 1))
-        self.weights = (self.m - 1) / (a * (abs_S) * (self.eff_dim - abs_S))
+        self.weights = (self.eff_dim - 1) / (a * (abs_S) * (self.eff_dim - abs_S))
         bool = torch.isfinite(self.weights.squeeze())
         # edge_vals = torch.sum(self.weights[bool]).unsqueeze(0).to(self.device)
         edge_vals = torch.tensor([1e5]).float().to(self.device)
@@ -175,7 +175,7 @@ class pref_shap():
         self.Z[:,self.mask] = Z
         self.weights = torch.concat([edge_vals,middle_weights,edge_vals],dim=0)
         self.weights=self.weights.unsqueeze(-1)
-        self.batched_Z = torch.chunk(self.Z,self.Z.shape[0]//self.cg_bs,dim=0)
+        self.batched_Z = torch.chunk(self.Z,max(self.Z.shape[0]//self.cg_bs,1),dim=0)
 
     def setup_item_vals(self):
         self.N_x,self.m = self.X.shape
@@ -252,6 +252,67 @@ class pref_shap():
 
         return output,first_flag,last_flag
 
+    def kernel_tensor_batch_pgp(self,S_list_batch,x,x_prime):
+        inv_tens=[]
+        vec = []
+        cat_xls_xs = []
+        cat_xls_xs_prime = []
+        cat_xrs_xs = []
+        cat_xrs_xs_prime = []
+        cat_klsc_xsc = []
+        cat_krsc_xsc = []
+        first_flag=False
+        last_flag=False
+        for i in range(S_list_batch.shape[0]): #build-up
+            S = S_list_batch[i,:].bool()
+            S_C = ~S
+            if S.sum()==0:
+                first_flag=True
+            elif S_C.sum()==0:
+                last_flag=True
+            else:
+                inv_tens.append(self.k(self.X[:,S],None,S))
+                x_S,x_prime_S= x[:,S],x_prime[:,S]
+                xs_cat = torch.cat([x_S,x_prime_S],dim=0)
+                vec_cat  = self.k(self.X[:,S], xs_cat,S)
+                vec.append(vec_cat)
+                stacked_lr = torch.cat([self.X_l[:,S],self.X_r[:,S]],dim=0)
+                l_hadamard_mat = self.k(stacked_lr,xs_cat,S)
+                r,c = l_hadamard_mat.shape
+                xls_xs,xls_xs_prime,xrs_xs,xrs_xs_prime, = l_hadamard_mat[:r//2,:][:,:c//2],l_hadamard_mat[:r//2,:][:,c//2:],l_hadamard_mat[r//2:,:][:,:c//2],l_hadamard_mat[r//2:,:][:,c//2:]
+                klsc_xsc = self.k( self.X_l[:,S_C],self.X[:,S_C],S_C)
+                krsc_xsc = self.k( self.X_r[:,S_C],self.X[:,S_C],S_C)
+                cat_xls_xs.append(xls_xs)
+                cat_xls_xs_prime.append(xls_xs_prime)
+                cat_xrs_xs.append(xrs_xs)
+                cat_xrs_xs_prime.append(xrs_xs_prime)
+                cat_klsc_xsc.append(klsc_xsc)
+                cat_krsc_xsc.append(krsc_xsc)
+        inv_tens=torch.stack(inv_tens,dim=0)
+        vec = torch.stack(vec,dim=0)
+
+        cg_output = self.tensor_CG.solve(inv_tens,vec) #BS x N x D
+        #Write assertion error
+
+        if torch.isnan(cg_output).any():
+            cg_output=torch.nan_to_num(cg_output, nan=0.0)
+
+        cat_klsc_xsc = torch.stack(cat_klsc_xsc,dim=0)
+        cat_krsc_xsc = torch.stack(cat_krsc_xsc,dim=0)
+
+        cg_output_a = torch.bmm(cat_klsc_xsc,cg_output)
+        cg_output_b = torch.bmm(cat_krsc_xsc,cg_output)
+
+        cg_l_a,cg_r_a = torch.chunk(cg_output_a,2,dim=-1)
+        cg_l_b,cg_r_b = torch.chunk(cg_output_b,2,dim=-1)
+
+        cat_xls_xs = torch.stack(cat_xls_xs,dim=0)
+        cat_xls_xs_prime = torch.stack(cat_xls_xs_prime,dim=0)
+        cat_xrs_xs = torch.stack(cat_xrs_xs,dim=0)
+        cat_xrs_xs_prime = torch.stack(cat_xrs_xs_prime,dim=0)
+        output = (cat_xls_xs*cg_l_a  + cat_xrs_xs_prime* cg_r_a) - (cat_xls_xs_prime*cg_l_b + cat_xrs_xs*cg_r_b)
+        return output,first_flag,last_flag
+
 
     def kernel_tensor_batch_user_case_1(self,u,S_batch,x,x_prime):
         inv_tens=[]
@@ -319,9 +380,12 @@ class pref_shap():
             output = output.unsqueeze(0)
         return output
 
-    def value_observation(self,S_batch,x,x_prime,u=None,case=2):
+    def value_observation(self,S_batch,x,x_prime,u=None,case=2,pgp=False):
         if u is None:
-            output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
+            if pgp:
+                output,first_flag,last_flag= self.kernel_tensor_batch_pgp(S_batch, x, x_prime)
+            else:
+                output,first_flag,last_flag= self.kernel_tensor_batch(S_batch, x, x_prime)
         else:
             if case == 1:
                 output, first_flag, last_flag = self.kernel_tensor_batch_user_case_1(u, S_batch, x, x_prime)
@@ -330,12 +394,12 @@ class pref_shap():
         output = (self.alpha@output).squeeze() - self.y_pred_mean
         return self.flag_adjustment(first_flag, last_flag, output)
 
-    def fit(self,x,x_prime,u=None,case=2):
+    def fit(self,x,x_prime,u=None,case=2,pgp=False):
         x=x.to(self.device)
         x_prime=x_prime.to(self.device)
         if u is not None:
-            tmp = torch.cat([u,x,x_prime],dim=1)
             u = u.to(self.device)
+            tmp = torch.cat([u,x,x_prime],dim=1)
             if case==1:
                 self.mask = (u.var(0) > 0).cpu()
                 self.eff_dim = self.mask.sum().item()
@@ -355,13 +419,15 @@ class pref_shap():
 
         Y_target = []
         for batch in tqdm(self.batched_Z):
-            Y_target.append(self.value_observation(batch,x,x_prime,u,case))
+            Y_target.append(self.value_observation(batch,x,x_prime,u,case,pgp=pgp))
         Y_cat = torch.cat(Y_target, dim=0)
         return Y_cat,self.weights,self.Z
 
-def OLS_solve(Y_target,Z_in,weights):
+def OLS_solve(Y_target,Z_in,weights,big_weight=1e5):
     mask = Z_in.sum(0)>0
     shapley_vals = torch.zeros(Z_in.shape[1],Y_target.shape[1])
+    weights[0] = big_weight
+    weights[-1] = big_weight
     Z = Z_in[:,mask]
     b = Z.t()@Y_target
     A = Z.t()@(Z*weights)
@@ -370,13 +436,13 @@ def OLS_solve(Y_target,Z_in,weights):
     shapley_vals[mask,:] = sol
     return shapley_vals
 
-def construct_values(Y_cat,Z,weights,coeffs,post_method):
+def construct_values(Y_cat,Z,weights,coeffs,post_method,big_weight=1e5):
     if len(Y_cat.shape) == 1:
         Y_target = weights.squeeze() * Y_cat
     else:
         Y_target = weights * Y_cat
     shap_dict={}
-    shap_dict[0]=OLS_solve(Y_target,Z,weights)
+    shap_dict[0]=OLS_solve(Y_target,Z,weights,big_weight)
     for coeff in coeffs:
         if post_method == 'lasso':
             l1 = coeff
