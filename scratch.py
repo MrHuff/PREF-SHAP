@@ -1,11 +1,9 @@
-import xgboost
-import shap
+import pickle
 
-# train XGBoost model
-X, y = shap.datasets.adult()
-model = xgboost.XGBClassifier().fit(X.iloc[:1000, :], y[:1000])
-#
-# # compute SHAP values
-explainer = shap.Explainer(model, X.iloc[:1000, :])
-shap_values_ref = explainer(X.iloc[:1000, :])
-shap.summary_plot(shap_values_ref,X.iloc[:1000, :])
+with open('dataset_summary.pickle', 'rb') as handle:
+    a = pickle.load(handle)
+with open('spec_r.pickle', 'rb') as handle:
+    b = pickle.load(handle)
+
+print(a)
+print(b)

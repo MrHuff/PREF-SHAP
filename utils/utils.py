@@ -199,21 +199,21 @@ class train_GP():
         indices = np.arange(y.shape[0])
         tr_ind,val_ind,test_ind = StratifiedKFold3(n_splits=self.folds,shuffle=True,random_state=self.seed).split(indices,y)[self.fold]
         if self.model_string in ['SGD_ukrr','krr_user','SGD_ukrr_pgp']:
-            scaler_u = StandardScaler()
-            self.tr_u = scaler_u.fit_transform(u[tr_ind])
-            self.val_u = scaler_u.transform(u[val_ind])
-            self.test_u = scaler_u.transform(u[test_ind])
+            self.scaler_u = StandardScaler()
+            self.tr_u = self.scaler_u.fit_transform(u[tr_ind])
+            self.val_u = self.scaler_u.transform(u[val_ind])
+            self.test_u = self.scaler_u.transform(u[test_ind])
         # test_set = np.concatenate([val_ind,test_ind],axis=0)
-        scaler=StandardScaler()
+        self.scaler=StandardScaler()
         self.left_tr,self.right_tr = l[tr_ind],r[tr_ind]
-        self.left_tr=scaler.fit_transform(self.left_tr)
-        self.right_tr=scaler.fit_transform(self.right_tr)
+        self.left_tr=self.scaler.fit_transform(self.left_tr)
+        self.right_tr=self.scaler.fit_transform(self.right_tr)
         self.left_val,self.right_val = l[val_ind],r[val_ind]
         self.left_test,self.right_test = l[test_ind],r[test_ind]
-        self.left_val=scaler.fit_transform(self.left_val)
-        self.right_val=scaler.fit_transform(self.right_val)
-        self.left_test=scaler.fit_transform(self.left_test)
-        self.right_test=scaler.fit_transform(self.right_test)
+        self.left_val=self.scaler.fit_transform(self.left_val)
+        self.right_val=self.scaler.fit_transform(self.right_val)
+        self.left_test=self.scaler.fit_transform(self.left_test)
+        self.right_test=self.scaler.fit_transform(self.right_test)
 
         self.y_tr = y[tr_ind]
         self.y_val = y[val_ind]
