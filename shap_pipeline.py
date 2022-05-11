@@ -41,6 +41,15 @@ def return_feature_names(job):
         coeffs= 10**np.linspace(-7,-2,0)
         return [],l2,False,coeffs
 
+    if job in ['alan_data_5000_100']:
+        D=3
+        a = np.zeros((D, D))
+        zip1,zip2 = np.triu_indices(D, 1)
+
+        l2 = ['within_cluster'] + [f'feature_{i}_{j}' for (i,j) in zip(zip1,zip2)] + [f'indicator {d}' for d in range(D)]
+        coeffs= 10**np.linspace(-7,-2,0)
+        return [],l2,False,coeffs
+
     if job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
         l2 = [f'important_{i}' for i in range(1,3)] + [f'Unimportant_{i}' for i in range(3,11)]
         coeffs= 10**np.linspace(-7,-2,0)
@@ -127,46 +136,51 @@ if __name__ == '__main__':
     # d=10
     # palette =['r']*d_imp+ ['g']*(d-d_imp)
     # for job in ['chameleon_wl','pokemon_wl']:
-    for job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
+    # for job in ['chameleon_wl']:
+    # for job in ['alan_data_5000_1000_10_10','toy_data_5000_10_2']:
+    # for job in ['toy_data_5000_10_2']:
+    for job in ['alan_data_5000_100']:
     # d = [5, 3]
     # for job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
     # for job in ['pokemon_wl']:
-        interventional=False
-        model='SGD_krr'
-        fold=0
-        train_params={
-            'dataset':job,
-            'fold':fold,
-            'epochs':100,
-            'patience':5,
-            'model_string':model, #krr_vanilla
-            'bs':1000,
-            'double_up':False,
-            'm_factor':1.0,
-            'seed': 42,
-            'folds': 10,
-        }
-        res_name = f'{interventional}_{job}_{model}'
-        if not os.path.exists(f'{res_name}'):
-            os.makedirs(f'{res_name}')
-        abs_data_container = []
-        for f in [0]:
-            # if not os.path.exists(f'{interventional}_{job}/cooking_dict_{f}.pt'):
-            cooking_dict,abs_data = get_shapley_vals(job=job,model_string=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional)
-            abs_data_container.append(abs_data)
-            torch.save(cooking_dict,f'{res_name}/cooking_dict_{f}.pt')
-        big_df = pd.concat(abs_data_container,axis=0).reset_index(drop=True)
-        big_df.to_csv(f'{res_name}/data_folds.csv')
-        for post_method in ['lasso']:
-            big_plt = []
+    #     for f in [0,1,2,3,4]:
+        for m in ['SGD_krr','SGD_krr_pgp']:
             for f in [0]:
-            # for f in [0]:
-                cooking_dict = torch.load(f'{res_name}/cooking_dict_{f}.pt')
-                data,features_names= get_shapley_vals_2(cooking_dict,job,post_method)
-                data['fold']=f
-                big_plt.append(data)
-            plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
-            plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-            plot.to_csv(f'{res_name}/{res_name}_{post_method}.csv')
+                interventional=False
+                model=m
+                fold=f
+                train_params={
+                    'dataset':job,
+                    'fold':fold,
+                    'epochs':100,
+                    'patience':5,
+                    'model_string':model, #krr_vanilla
+                    'bs':1000,
+                    'double_up':False,
+                    'm_factor':1.0,
+                    'seed': 42,
+                    'folds': 10,
+                }
+                res_name = f'{interventional}_{job}_{model}'
+                if not os.path.exists(f'{res_name}'):
+                    os.makedirs(f'{res_name}')
+                abs_data_container = []
+                for f in [0]:
+                    # if not os.path.exists(f'{interventional}_{job}/cooking_dict_{f}.pt'):
+                    cooking_dict,abs_data = get_shapley_vals(job=job,model_string=model,fold=fold,train_params=train_params,num_matches=-1,post_method='OLS',interventional=interventional)
+                    abs_data_container.append(abs_data)
+                    torch.save(cooking_dict,f'{res_name}/cooking_dict_{f}.pt')
+                big_df = pd.concat(abs_data_container,axis=0).reset_index(drop=True)
+                big_df.to_csv(f'{res_name}/data_folds.csv')
+                for post_method in ['lasso']:
+                    big_plt = []
+                    for f in [0]:
+                        cooking_dict = torch.load(f'{res_name}/cooking_dict_{f}.pt')
+                        data,features_names= get_shapley_vals_2(cooking_dict,job,post_method)
+                        data['fold']=f
+                        big_plt.append(data)
+                    plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
+                    plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+                    plot.to_csv(f'{res_name}/{res_name}_{post_method}.csv')
 
 

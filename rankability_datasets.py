@@ -104,6 +104,68 @@ def tennis_rankability():
     spec_r_list = tennis_generate_b_mats(df)
     return np.mean(spec_r_list),np.std(spec_r_list)
 
+def cartesian_product(*arrays):
+    ndim = len(arrays)
+    return (np.stack(np.meshgrid(*arrays), axis=-1)
+              .reshape(-1, ndim))
+
+def deciding_features(left,right,D):
+    a = np.zeros((D,D))
+    iu = np.triu_indices(D,1)
+    a[iu]=np.arange(1,D+1)
+    a=a+np.transpose(a)
+    dec_feat_index = a[left,right]
+    return dec_feat_index.astype(int)
+
+def one_hot_numpy(a):
+    b = np.zeros((a.size, a.max()+1))
+    b[np.arange(a.size), a] = 1
+    return b
+
+def synthetic_rankability():
+    D=3
+    players=1000
+    hidden_cluster_list = list(range(D))
+    hidden_states = np.random.choice(hidden_cluster_list, players)
+    total_covs = np.cumsum(np.arange(D))[-1] + 1
+    x_cov = np.random.randn(players,
+                            total_covs)
+    n_matches = 40000
+    print(np.corrcoef(x_cov.T))
+    a = np.arange(players)
+    all_combinations = cartesian_product(a, a)
+    all_matches = all_combinations[all_combinations[:, 0] != all_combinations[:, 1]]
+    matches = all_matches[np.random.choice(all_matches.shape[0], n_matches, replace=False)]
+    left_hidden, left_cov = hidden_states[matches[:, 0]], x_cov[matches[:, 0]]
+    right_hidden, right_cov = hidden_states[matches[:, 1]], x_cov[matches[:, 1]]
+    d_feat = deciding_features(left_hidden, right_hidden, D)
+    y = []
+
+    wl = np.zeros((n_matches,2))
+
+    right_cov = np.concatenate([right_cov, one_hot_numpy(right_hidden)], axis=1)
+    left_cov = np.concatenate([left_cov, one_hot_numpy(left_hidden)], axis=1)
+    for i, d in enumerate(d_feat):
+        y_tmp = np.sign(right_cov[i, d] - left_cov[i, d])
+        if y_tmp>0:
+            wl[i,0] = matches[i,0]
+            wl[i,1] = matches[i,1]
+        else:
+            wl[i,0] = matches[i,1]
+            wl[i,1] = matches[i,0]
+
+    b_train = pd.DataFrame(np.zeros((players, players)),
+                           columns=np.arange(players), index=np.arange(players))
+    contest = pd.DataFrame(wl,columns=['Loser','Winner'])
+    for row in range(contest.shape[0]):
+        hold = contest.iloc[row, :]
+        i, j = hold["Winner"], hold["Loser"]
+        b_train.loc[i, j] += 1
+        b_train.loc[j, i] += -1
+
+    B_train = np.array(b_train)
+    return specR(B_train)
+
 def chameleon_rankability():
     contest = pd.read_csv("./Chameleons/matches.csv",
                           index_col="Unnamed: 0")
@@ -152,10 +214,13 @@ if __name__ == '__main__':
 
 
     dat = {}
+    spec_r_synthetic = synthetic_rankability()
+    print(spec_r_synthetic)
     spec_r_mean_tennis,spec_r_std_tennis=tennis_rankability()
     spec_r_mean_web,spec_r_std_web=website_rankability()
     specr_cham = chameleon_rankability()
     specr_pokemon = pokemon_rankability()
+
     dat['spec_r_mean_tennis'] = spec_r_mean_tennis
     dat['spec_r_std_tennis'] = spec_r_std_tennis
     dat['spec_r_mean_web'] = spec_r_mean_web

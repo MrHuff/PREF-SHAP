@@ -19,12 +19,16 @@ def return_feature_names(job,d):
        'Psychic', 'Rock', 'Steel', 'Water']
         coeffs= 10**np.linspace(-7,-2,0)
         return [],l2,False,coeffs
+    if job in ['alan_data_5000_100']:
+        D = 3
+        a = np.zeros((D, D))
+        zip1, zip2 = np.triu_indices(D, 1)
 
-    #Fire 13- Grass 16
-    # Fire - Ice 18
-    # Fire - Bug 7
-    # Fire - Steel 23
-    # Blastoise vs Charizard
+        l2 = ['within_cluster'] + [f'feature_{i}_{j}' for (i, j) in zip(zip1, zip2)] + [f'indicator {d}' for d in
+                                                                                        range(D)]
+        coeffs = 10 ** np.linspace(-7, -2, 0)
+        return [], l2, False, coeffs
+
     if job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
         l2 = [f'important_{i}' for i in range(1,3)] + [f'Unimportant_{i}' for i in range(3,d[0]+1)]
         coeffs= 10**np.linspace(-7,-2,0)
@@ -58,7 +62,7 @@ def get_shapley_vals(job,model_string,fold,post_method,interventional,shap_l,sha
     c = train_GP(train_params=train_params)
     c.load_and_split_data()
     ps = pref_shap(model=model, alpha=alpha, k=inner_kernel, X_l=x_ind_l, X_r=x_ind_r, X=c.S, max_S=2500,
-                   rff_mode=False, eps=1e-6, cg_max_its=25, lamb=1e-4, max_inv_row=0, cg_bs=50, post_method=post_method,
+                   rff_mode=False, eps=1e-6, cg_max_its=25, lamb=1e-4, max_inv_row=0, cg_bs=5, post_method=post_method,
                    interventional=interventional, device='cuda:0')
 
     # num_matches = 100
@@ -92,11 +96,20 @@ def hard_data_get_vals(train_params,d):
     c = train_GP(train_params=train_params)
     c.load_and_split_data()
     if train_params['dataset']!='pokemon_wl':
-        state = np.load(train_params['dataset'] + '/state.npy', allow_pickle=True)
-        train_state = state[c.tr_ind,:]
-        mask = np.isin(train_state,[0,1]).prod(axis=1)==1
-        l2 = [f'important_{i}' for i in range(1,3)] + [f'Unimportant_{i}' for i in range(3,d[0]+1)]
 
+        left_mask = c.left_tr[:,4+d[0]]>0
+        right_mask = c.right_tr[:,4+d[1]]>0
+        mask_1 = left_mask & right_mask
+        left_mask = c.left_tr[:, 4 + d[1]] > 0
+        right_mask = c.right_tr[:, 4 + d[0]] > 0
+        mask_2 = left_mask & right_mask
+
+        mask=mask_1 | mask_2
+        D = 3
+        a = np.zeros((D, D))
+        zip1, zip2 = np.triu_indices(D, 1)
+        l2 = ['within_cluster'] + [f'feature_{i}_{j}' for (i, j) in zip(zip1, zip2)] + [f'indicator {d}' for d in
+                                                                                        range(D)]
     else:
         l2 = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary',
               'Bug', 'Dark', 'Dragon', 'Electric', 'Fairy', 'Fighting', 'Fire',
@@ -105,6 +118,9 @@ def hard_data_get_vals(train_params,d):
 
         left_mask = (c.left_tr[:,d[0]]>0) |  (c.left_tr[:,d[1]]>0)
         right_mask = (c.right_tr[:,d[1]]>0) | (c.right_tr[:,d[0]]>0)
+        middle_mask = ((c.left_tr[:,d[0]]>0) & (c.right_tr[:,d[0]]>0)) | ((c.left_tr[:,d[1]]>0) & (c.right_tr[:,d[1]]>0))
+        middle_mask = middle_mask
+
         type_idx = [i for i in range(7,(len(l2))) ]
         type_idx.remove(d[0])
         type_idx.remove(d[1])
@@ -112,11 +128,12 @@ def hard_data_get_vals(train_params,d):
         for t in type_idx:
             left_mask = left_mask & (c.left_tr[:, t]<=0)
             right_mask = right_mask & (c.right_tr[:, t]<=0)
+            middle_mask = middle_mask & ((c.left_tr[:, t]<=0) | (c.right_tr[:, t]<=0) )
         # fire_grass_mask = fire_mask & (c.left_tr[:,16]>0)
         # fire_grass_ice = fire_mask & (c.left_tr[:,18]>0)
         # fire_grass_bug = fire_mask & (c.left_tr[:,7]>0)
         # fire_grass_steel = fire_mask & (c.left_tr[:,23]>0)
-        mask = left_mask & right_mask
+        mask = left_mask & right_mask & (~middle_mask)
         # mask = fire_grass_mask | fire_grass_ice | fire_grass_steel | fire_grass_bug
     y = (c.y_tr[mask]>0)[:,np.newaxis]*1.0
     shap_l = c.left_tr[mask,:]
@@ -137,45 +154,47 @@ if __name__ == '__main__':
     # d=[12,19] #Normal, Fightning
     # d=[18,14] #Electric vs Flying
     # d=[16,13] #Grass fire
-    for d in [[13,24],[17,10],[12,19],[16,13],[10,14],[18,9],[18,14]]:
-        for job in ['pokemon_wl']:
-            interventional=False
-            model='SGD_krr_pgp'
-            fold=0
-            train_params={
-                'dataset':job,
-                'fold':fold,
-                'epochs':100,
-                'patience':5,
-                'model_string':'SGD_krr_pgp', #krr_vanilla
-                'bs':1000,
-                'double_up':False,
-                'm_factor':2.0,
-                'seed': 42,
-                'folds': 10,
-            }
-            res_name = f'local_{job}_{d}_{model}'
-            if not os.path.exists(f'{res_name}'):
-                os.makedirs(f'{res_name}')
-            for f in [0]:
-                left,right,dat_abs = hard_data_get_vals(train_params,d)
-                cooking_dict = get_shapley_vals(job=job,model_string=model,fold=fold,post_method='OLS',
-                                                interventional=interventional,
-                                                shap_l=left,
-                                                shap_r=right
-                                                )
-                torch.save(cooking_dict,f'{res_name}/cooking_dict_{f}.pt')
-                dat_abs.to_csv(f'{res_name}/data_folds.csv')
-        # for job in ['pokemon_wl','hard_data_10000_1000_10_10']:
-            for post_method in ['lasso']:
-                big_plt = []
+    # for d in [[13,24],[17,10],[12,19],[16,13],[10,14],[18,9],[18,14]]:
+    #     for job in ['pokemon_wl']:
+    for d in [[0,0],[0,1],[1,1],[1,2],[0,2]]:
+        for job in ['alan_data_5000_100']:
+            for m in ['SGD_krr','SGD_krr_pgp']:
+                interventional=False
+                model=m
+                fold=0
+                train_params={
+                    'dataset':job,
+                    'fold':fold,
+                    'epochs':100,
+                    'patience':5,
+                    'model_string':'SGD_krr_pgp', #krr_vanilla
+                    'bs':1000,
+                    'double_up':False,
+                    'm_factor':2.0,
+                    'seed': 42,
+                    'folds': 10,
+                }
+                res_name = f'local_{job}_{d}_{model}'
+                if not os.path.exists(f'{res_name}'):
+                    os.makedirs(f'{res_name}')
                 for f in [0]:
-                    cooking_dict = torch.load(f'{res_name}/cooking_dict_{f}.pt')
-                    data,features_names= get_shapley_vals_2(cooking_dict,job,post_method,d)
-                    data['fold']=f
-                    big_plt.append(data)
-                plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
-                plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
-                plot.to_csv(f'{res_name}/{res_name}_{post_method}.csv')
+                    left,right,dat_abs = hard_data_get_vals(train_params,d)
+                    cooking_dict = get_shapley_vals(job=job,model_string=model,fold=fold,post_method='OLS',
+                                                    interventional=interventional,
+                                                    shap_l=left,
+                                                    shap_r=right
+                                                    )
+                    torch.save(cooking_dict,f'{res_name}/cooking_dict_{f}.pt')
+                    dat_abs.to_csv(f'{res_name}/data_folds.csv')
+                for post_method in ['lasso']:
+                    big_plt = []
+                    for f in [0]:
+                        cooking_dict = torch.load(f'{res_name}/cooking_dict_{f}.pt')
+                        data,features_names= get_shapley_vals_2(cooking_dict,job,post_method,d)
+                        data['fold']=f
+                        big_plt.append(data)
+                    plot= pd.concat(big_plt,axis=0).reset_index(drop=True)
+                    plot['d'] = plot['d'].apply(lambda x: features_names[int(x-1)])
+                    plot.to_csv(f'{res_name}/{res_name}_{post_method}.csv')
 
 

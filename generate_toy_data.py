@@ -2,7 +2,7 @@ from data_generation.data_generation_alan_method import generate_x as generate_a
 import pickle
 import os
 from data_generation.data_generation import *
-
+from data_generation.data_generation_cluster import *
 import numpy as np
 
 
@@ -24,44 +24,30 @@ if __name__ == '__main__':
     num_latent_states = 10
     d_imp = 2
 
-    job_name =f'alan_data_{n_pairs}_{n_samples}_{d}_{num_latent_states}'
-    if not os.path.exists(job_name):
-        os.makedirs(job_name)
-    u, u_prime, y ,state,S= generate_alan(n_pairs=n_pairs, n_samples=n_samples, d=d, num_latent_states=num_latent_states,in_choice=[0,1])
-    y=torch.where(y<=0.0,-1,1).float().squeeze()
-    save_files(job_name,u.numpy(),u_prime.numpy(),S,y.numpy())
+    # job_name =f'alan_data_{n_pairs}_{n_samples}_{d}_{num_latent_states}'
+    # if not os.path.exists(job_name):
+    #     os.makedirs(job_name)
+    # u, u_prime, y ,state,S= generate_alan(n_pairs=n_pairs, n_samples=n_samples, d=d, num_latent_states=num_latent_states,in_choice=[0,1])
+    # y=torch.where(y<=0.0,-1,1).float().squeeze()
+    # save_files(job_name,u.numpy(),u_prime.numpy(),S,y.numpy())
 
     job_name =f'toy_data_{n_pairs}_{d}_{d_imp}'
     if not os.path.exists(job_name):
         os.makedirs(job_name)
     u, u_prime,S = generate_mvp_X(n_pairs, d=d, d_imp=d_imp)
-    fixed_ls=torch.tensor([1.]*d_imp+[1.]*(d-d_imp)).float()
+    fixed_ls=torch.tensor([1.0]*d_imp+[1.]*(d-d_imp)).float()
     y =GPGP_mvp_krr(u,u_prime,fixed_ls).squeeze()
     save_files(job_name,u.numpy(),u_prime.numpy(),S.numpy(),y.numpy())
 
-    n_pairs = 10000
-    n_samples = 1000
-    d = 10
-    num_latent_states = 5
-    in_choice = list(range(num_latent_states))
-    job_name =f'hard_data_{n_pairs}_{n_samples}_{d}_{num_latent_states}'
-    if not os.path.exists(job_name):
-        os.makedirs(job_name)
 
-    u, u_prime, y ,state,S= generate_alan(n_pairs=n_pairs, n_samples=n_samples, d=d, num_latent_states=num_latent_states,in_choice=in_choice)
-    y=torch.where(y<=0.0,-1,1).float().squeeze()
-    save_files(job_name,u.numpy(),u_prime.numpy(),S,y.numpy())
-    with open(f'{job_name}/state.npy', 'wb') as f:
-        np.save(f, state)
-
-
-    job_name =f'ref_hard_data_{n_pairs}_{n_samples}_{d}_{num_latent_states}'
+    n_pairs = 5000
+    n_samples = 100
+    job_name =f'alan_data_{n_pairs}_{n_samples}'
     if not os.path.exists(job_name):
         os.makedirs(job_name)
     in_choice = list(range(2))
-    u, u_prime, y ,state,S= generate_alan(n_pairs=n_pairs, n_samples=n_samples, d=d, num_latent_states=num_latent_states,in_choice=in_choice)
-    y=torch.where(y<=0.0,-1,1).float().squeeze()
-    save_files(job_name,u.numpy(),u_prime.numpy(),S,y.numpy())
+    u, u_prime, y ,S= generate_clusters()
+    save_files(job_name,u,u_prime,S,y)
 
 
 
