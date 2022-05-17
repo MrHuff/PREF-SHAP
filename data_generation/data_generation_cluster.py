@@ -17,7 +17,7 @@ def deciding_features(left,right,D):
     a=a+np.transpose(a)
     dec_feat_index = a[left,right]
     return dec_feat_index.astype(int)
-def generate_clusters(D=3,players=1000,n_matches=40000):
+def generate_clusters(D=3,players=1000,n_matches=5000):
     hidden_cluster_list = list(range(D))
     hidden_states = np.random.choice(hidden_cluster_list,players)
     total_covs = np.cumsum(np.arange(D))[-1]+1
@@ -40,6 +40,8 @@ def generate_clusters(D=3,players=1000,n_matches=40000):
     losers=[]
     right_cov=np.concatenate([right_cov,one_hot_numpy(right_hidden)],axis=1)
     left_cov=np.concatenate([left_cov,one_hot_numpy(left_hidden)],axis=1)
+    # right_cov=np.concatenate([right_cov,right_hidden[:,np.newaxis]],axis=1)
+    # left_cov=np.concatenate([left_cov,left_hidden[:,np.newaxis]],axis=1)
     for i,d in enumerate(d_feat):
         y_tmp=np.sign(right_cov[i, d] - left_cov[i, d])
         # y.append(y_tmp)
@@ -54,6 +56,7 @@ def generate_clusters(D=3,players=1000,n_matches=40000):
     losers =np.stack(losers,axis=0)
     winners =np.stack(winners,axis=0)
     S = np.concatenate([x_cov,one_hot_numpy(hidden_states)],axis=1)
+    # S = np.concatenate([x_cov,hidden_states[:,np.newaxis]],axis=1)
 
     return losers,winners,y,S
 if __name__ == '__main__':

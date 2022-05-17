@@ -436,7 +436,7 @@ def OLS_solve(Y_target,Z_in,weights,big_weight=1e5):
     shapley_vals[mask,:] = sol
     return shapley_vals
 
-def construct_values(Y_cat,Z,weights,coeffs,post_method,big_weight=1e5):
+def construct_values(Y_cat,Z,weights,coeffs,post_method,big_weight=1e4):
     if len(Y_cat.shape) == 1:
         Y_target = weights.squeeze() * Y_cat
     else:

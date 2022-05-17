@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
 
     n_pairs = 5000
-    n_samples = 100
+    n_samples = 1000
     job_name =f'alan_data_{n_pairs}_{n_samples}'
     if not os.path.exists(job_name):
         os.makedirs(job_name)

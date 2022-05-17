@@ -19,15 +19,24 @@ def return_feature_names(job,d):
        'Psychic', 'Rock', 'Steel', 'Water']
         coeffs= 10**np.linspace(-7,-2,0)
         return [],l2,False,coeffs
-    if job in ['alan_data_5000_100']:
+    if job == 'alan_data_5000_100':
         D = 3
         a = np.zeros((D, D))
         zip1, zip2 = np.triu_indices(D, 1)
 
-        l2 = ['within_cluster'] + [f'feature_{i}_{j}' for (i, j) in zip(zip1, zip2)] + [f'indicator {d}' for d in
-                                                                                        range(D)]
+        l2 = [r'$x^{[0]}$'] + [r'$x^{AB}$',r'$x^{AC}$',r'$x^{BC}$'] + ['in A','in B','in C']
+
         coeffs = 10 ** np.linspace(-7, -2, 0)
         return [], l2, False, coeffs
+
+    if job =='alan_data_5000_1000':
+        D=3
+        a = np.zeros((D, D))
+        zip1,zip2 = np.triu_indices(D, 1)
+
+        l2 = ['within_cluster'] + [f'feature_{i}_{j}' for (i,j) in zip(zip1,zip2)] + [f'indicator']
+        coeffs= 10**np.linspace(-7,-2,0)
+        return [],l2,False,coeffs
 
     if job in [f'hard_data_10000_1000_{d[0]}_{d[1]}']:
         l2 = [f'important_{i}' for i in range(1,3)] + [f'Unimportant_{i}' for i in range(3,d[0]+1)]
@@ -95,50 +104,88 @@ def get_shapley_vals_2(cooking_dict,job,post_method,d):
 def hard_data_get_vals(train_params,d):
     c = train_GP(train_params=train_params)
     c.load_and_split_data()
-    if train_params['dataset']!='pokemon_wl':
+    left_all_data = np.concatenate([c.left_tr, c.left_val, c.left_test], axis=0)
+    right_all_data = np.concatenate([c.right_tr, c.right_val, c.right_test], axis=0)
+    y = np.concatenate([c.y_tr, c.y_val, c.y_test], axis=0)
 
-        left_mask = c.left_tr[:,4+d[0]]>0
-        right_mask = c.right_tr[:,4+d[1]]>0
+    if d in ['pokemon_squirtle_wl']:
+        l2 = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary',
+              'Bug', 'Dark', 'Dragon', 'Electric', 'Fairy', 'Fighting', 'Fire',
+              'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
+              'Psychic', 'Rock', 'Steel', 'Water']
+        shap_l,shap_r,y = load_player(d)
+        y = y[:,np.newaxis]
+        winners = y * shap_r + (1 - y) * shap_l
+        loosers = (1 - y) * shap_r + y * shap_l
+        dat_abs = pd.DataFrame(winners - loosers, columns=l2)
+        dat_abs['fold'] = train_params['fold']
+        return torch.from_numpy(shap_l).float(), torch.from_numpy(shap_r).float(), dat_abs
+
+    if train_params['dataset']=='alan_data_5000_100':
+
+        left_mask = left_all_data[:,4+d[0]]>0
+        right_mask = right_all_data[:,4+d[1]]>0
         mask_1 = left_mask & right_mask
-        left_mask = c.left_tr[:, 4 + d[1]] > 0
-        right_mask = c.right_tr[:, 4 + d[0]] > 0
+        left_mask = left_all_data[:, 4 + d[1]] > 0
+        right_mask = right_all_data[:, 4 + d[0]] > 0
         mask_2 = left_mask & right_mask
-
         mask=mask_1 | mask_2
         D = 3
         a = np.zeros((D, D))
         zip1, zip2 = np.triu_indices(D, 1)
-        l2 = ['within_cluster'] + [f'feature_{i}_{j}' for (i, j) in zip(zip1, zip2)] + [f'indicator {d}' for d in
-                                                                                        range(D)]
+        l2 = [r'$x^{[0]}$'] + [r'$x^{AB}$',r'$x^{AC}$',r'$x^{BC}$'] + ['in A','in B','in C']
+    elif train_params['dataset'] == 'alan_data_5000_1000':
+        elements = np.unique(left_all_data[:, 4]).tolist()
+        left_mask = np.round(left_all_data[:, 4],2)==np.round(elements[d[0]],2)
+        right_mask = np.round(right_all_data[:, 4],2)==np.round(elements[d[1]],2)
+        mask_1 = left_mask | right_mask
+        left_mask = np.round(left_all_data[:, 4],2)==np.round(elements[d[1]],2)
+        right_mask = np.round(right_all_data[:, 4],2)==np.round(elements[d[0]],2)
+        mask_2 = left_mask | right_mask
+
+        mask = mask_1 | mask_2
+        D = 3
+        a = np.zeros((D, D))
+        zip1, zip2 = np.triu_indices(D, 1)
+        l2 = [r'$x^{[0]}$'] + [r'$x^{AB}$',r'$x^{AC}$',r'$x^{BC}$'] + ['in A','in B','in C']
+
     else:
         l2 = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed', 'Legendary',
               'Bug', 'Dark', 'Dragon', 'Electric', 'Fairy', 'Fighting', 'Fire',
               'Flying', 'Ghost', 'Grass', 'Ground', 'Ice', 'Normal', 'Poison',
               'Psychic', 'Rock', 'Steel', 'Water']
+        left_mask = (left_all_data[:,d[0]]>0)
+        right_mask = (right_all_data[:,d[0]]>0)
+        middle_mask = ((left_all_data[:,d[0]]>0) & (right_all_data[:,d[0]]>0))
+        for d_ind in d[1:]:
+            left_mask = left_mask | (left_all_data[:,d_ind]>0)
+            right_mask = right_mask |  (right_all_data[:,d_ind]>0)
+            middle_mask = middle_mask | ((left_all_data[:,d_ind]>0) & (right_all_data[:,d_ind]>0))
 
-        left_mask = (c.left_tr[:,d[0]]>0) |  (c.left_tr[:,d[1]]>0)
-        right_mask = (c.right_tr[:,d[1]]>0) | (c.right_tr[:,d[0]]>0)
-        middle_mask = ((c.left_tr[:,d[0]]>0) & (c.right_tr[:,d[0]]>0)) | ((c.left_tr[:,d[1]]>0) & (c.right_tr[:,d[1]]>0))
-        middle_mask = middle_mask
+        # left_mask = (left_all_data[:,d[0]]>0) |  (left_all_data[:,d[1]]>0)
+        # right_mask = (right_all_data[:,d[0]]>0) | (right_all_data[:,d[1]]>0)
+        # middle_mask = ((left_all_data[:,d[0]]>0) & (right_all_data[:,d[0]]>0)) | ((left_all_data[:,d[1]]>0) & (right_all_data[:,d[1]]>0))
+        # middle_mask = middle_mask
 
         type_idx = [i for i in range(7,(len(l2))) ]
-        type_idx.remove(d[0])
-        type_idx.remove(d[1])
+        for d_ind in d:
+            type_idx.remove(d_ind)
 
         for t in type_idx:
-            left_mask = left_mask & (c.left_tr[:, t]<=0)
-            right_mask = right_mask & (c.right_tr[:, t]<=0)
-            middle_mask = middle_mask & ((c.left_tr[:, t]<=0) | (c.right_tr[:, t]<=0) )
-        # fire_grass_mask = fire_mask & (c.left_tr[:,16]>0)
-        # fire_grass_ice = fire_mask & (c.left_tr[:,18]>0)
-        # fire_grass_bug = fire_mask & (c.left_tr[:,7]>0)
-        # fire_grass_steel = fire_mask & (c.left_tr[:,23]>0)
+            left_mask = left_mask & (left_all_data[:, t]<=0)
+            right_mask = right_mask & (right_all_data[:, t]<=0)
+            middle_mask = middle_mask & ((left_all_data[:, t]<=0) | (right_all_data[:, t]<=0) )
+        # fire_grass_mask = fire_mask & (left_all_data[:,16]>0)
+        # fire_grass_ice = fire_mask & (left_all_data[:,18]>0)
+        # fire_grass_bug = fire_mask & (left_all_data[:,7]>0)
+        # fire_grass_steel = fire_mask & (left_all_data[:,23]>0)
         mask = left_mask & right_mask & (~middle_mask)
         # mask = fire_grass_mask | fire_grass_ice | fire_grass_steel | fire_grass_bug
-    y = (c.y_tr[mask]>0)[:,np.newaxis]*1.0
-    shap_l = c.left_tr[mask,:]
-    shap_r = c.right_tr[mask,:]
-    left,right = torch.from_numpy(c.left_tr[mask,:]).float(),torch.from_numpy(c.right_tr[mask,]).float()
+    y = (y[mask]>0)[:,np.newaxis]*1.0
+
+    shap_l = left_all_data[mask,:]
+    shap_r = right_all_data[mask,:]
+    left,right = torch.from_numpy(left_all_data[mask,:]).float(),torch.from_numpy(right_all_data[mask,]).float()
 
     winners = y * shap_r + (1 - y) * shap_l
     loosers = (1 - y) * shap_r + y * shap_l
@@ -146,7 +193,12 @@ def hard_data_get_vals(train_params,d):
     dat_abs['fold'] = train_params['fold']
     # return left[:50,:],right[:50,:],dat_abs.iloc[:50,:]
     return left,right,dat_abs
-
+def load_player(job):
+    dataset_string = f'{job}'
+    l_load = np.load(dataset_string + '/l_processed.npy', allow_pickle=True)
+    r_load = np.load(dataset_string + '/r_processed.npy', allow_pickle=True)
+    y_load = np.load(dataset_string + '/y.npy', allow_pickle=True)
+    return l_load,r_load,y_load
 
 if __name__ == '__main__':
     # d=[13,24] #water v fire
@@ -154,10 +206,12 @@ if __name__ == '__main__':
     # d=[12,19] #Normal, Fightning
     # d=[18,14] #Electric vs Flying
     # d=[16,13] #Grass fire
-    # for d in [[13,24],[17,10],[12,19],[16,13],[10,14],[18,9],[18,14]]:
-    #     for job in ['pokemon_wl']:
-    for d in [[0,0],[0,1],[1,1],[1,2],[0,2]]:
-        for job in ['alan_data_5000_100']:
+    # for d in [[13, 24], [17, 10], [12, 19], [16, 13], [10, 14],[16, 24]]:#,[18,9],[18,14]]:
+    for d in [[13, 24,15,12,9]]:#,[18,9],[18,14]]:
+    # for d in ['pokemon_squirtle_wl']:
+        for job in ['pokemon_wl']:
+    # for d in [[0,0],[0,1],[1,1],[1,2],[0,2]]:
+    #     for job in ['alan_data_5000_100']:
             for m in ['SGD_krr','SGD_krr_pgp']:
                 interventional=False
                 model=m

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 plt.style.use('ggplot')
 import falkon
 from falkon import FalkonOptions
-from falkon.kernels import Kernel, DiffKernel, KeopsKernelMixin
+from falkon.kernels import Kernel, DiffKernel, KeopsKernelMixin,GaussianKernel
 from sklearn.metrics import roc_auc_score
 from falkon.hopt.objectives import NystromCompReg
 import tqdm
@@ -88,8 +88,9 @@ def train_krr(kernel,Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,pen,m_fac=1.0):
     best_tr = -np.inf
     best_model = copy.deepcopy(model)
     counter = 0
-    pbar = tqdm.tqdm(list(range(500)))
+    pbar = tqdm.tqdm(list(range(100)))
     for i, j in enumerate(pbar):
+        print(i)
         opt_hp.zero_grad()
         loss = model(Xtrain, Ytrain)
         loss.backward()
@@ -114,7 +115,10 @@ def train_krr(kernel,Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,pen,m_fac=1.0):
         if counter > patience:
             break
     return best_model, best_tr,best_val, best_test
-
+def SGD_KRR_base(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5,m_fac=1.0):
+    lengthscale_init = torch.tensor([ls]*(Xtrain.shape[1])).requires_grad_()
+    kernel = GaussianKernel(sigma=lengthscale_init,opt=FalkonOptions(keops_active="yes"))
+    return train_krr(kernel,Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,pen,m_fac)
 def SGD_KRR(Xtrain,Ytrain,Xval,Yval,Xtest,Ytest,ls,pen=1e-5,m_fac=1.0):
     lengthscale_init = torch.tensor([ls]*(Xtrain.shape[1]//2)).requires_grad_()
     kernel = diffrentiable_FALKON_GPGP(lengthscale=lengthscale_init, options=falkon.FalkonOptions())

@@ -518,6 +518,53 @@ def NFL_offset(split=0.7, matern_length=0.3):
     return np.array(B_train), choix_ls, features_
 
 
+def Pokemon_squirtle(split=0.7, matern_length=0.3):
+    stats = pd.read_csv("./Pokemon/pokemon.csv", index_col="#")
+    contest_1 = pd.read_csv("./Pokemon/combats.csv")
+    contest_2 = pd.read_csv("./Pokemon/tests.csv")
+    contest = pd.concat([contest_1,contest_2],axis=0).reset_index()
+
+
+    # Create type columns
+    type_col = np.unique(list(stats["Type 2"].unique()) + list(stats["Type 1"].unique()))
+    type_col = type_col[type_col != 'nan']
+    for col in type_col:
+        stats[col] = 0
+
+    for i in stats.index:
+        stats.loc[i, stats.loc[i, "Type 1"]] += 1
+        if not pd.isna(stats.loc[i, "Type 2"]):
+            stats.loc[i, stats.loc[i, "Type 2"]] += 1
+
+    del stats["Type 1"]
+    del stats["Type 2"]
+    del stats["Generation"]
+    name_ls = stats["Name"].values
+    del stats["Name"]
+    stats["Legendary"] += 0
+    numeric = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed']
+
+    scaler = StandardScaler()
+    stats[numeric] = scaler.fit_transform(np.float64(stats[numeric]))
+
+    # Bradley Terry
+    choix_ls = []
+    mask_1 = (contest['First_pokemon'] == 31) | (contest['Second_pokemon'] == 31)
+    mask_2 = (contest['Winner'] != 31) #| (contest['Second_pokemon'] == 10)
+    contest = contest[mask_2&mask_1]
+    contest = contest.dropna()
+    for i in range(contest.shape[0]):
+        hold = contest.iloc[i, :]
+        if hold["First_pokemon"] == hold["Winner"]:
+            choix_ls.append(
+                (hold["First_pokemon"]-1, hold["Second_pokemon"]-1))
+        else:
+            choix_ls.append(
+                (hold["Second_pokemon"]-1, hold["First_pokemon"]-1))
+
+    return [], np.array(choix_ls), np.array(stats)
+
+
 def Pokemon(split=0.7, matern_length=0.3):
     stats = pd.read_csv("./Pokemon/pokemon.csv", index_col="#")
     contest_1 = pd.read_csv("./Pokemon/combats.csv")
@@ -651,7 +698,8 @@ def save_data_wl(ds_name,choix_ls,predictors):
 
 if __name__ == '__main__':
 
-    for func,ds_name in zip([Chameleon,Pokemon],['chameleon','pokemon']):
+    # for func,ds_name in zip([Chameleon,Pokemon,Pokemon_squirtle],['chameleon','pokemon','pokemon_squirtle']):
+    for func,ds_name in zip([Pokemon_squirtle],['pokemon_squirtle']):
         B_train, choix_ls, predictors = func()
         save_data(ds_name,choix_ls,predictors)
         save_data_wl(ds_name,choix_ls,predictors)

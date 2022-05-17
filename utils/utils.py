@@ -10,7 +10,7 @@ from sklearn_pandas import DataFrameMapper
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold,StratifiedGroupKFold
 import tqdm
-from GPGP.KRR_model import SGD_KRR,SGD_UKRR,SGD_UKRR_PGP,SGD_KRR_PGP
+from GPGP.KRR_model import SGD_KRR,SGD_UKRR,SGD_UKRR_PGP,SGD_KRR_PGP,SGD_KRR_base
 
 
 def sq_dist( x1, x2):
@@ -40,10 +40,16 @@ def covar_dist( x1, x2):
 
 
 def get_median_ls(X, Y=None):
+    if X.shape[0] > 5000:
+        idx = torch.randperm(X.shape[0])[:5000]
+        X = X[idx, :]
     with torch.no_grad():
         if Y is None:
             d = covar_dist(x1=X, x2=X)
         else:
+            if Y.shape[0] > 5000:
+                idx = torch.randperm(Y.shape[0])[:5000]
+                Y = Y[idx, :]
             d = covar_dist(x1=X, x2=Y)
         ret = torch.sqrt(torch.median(d[d >= 0]))  # print this value, should be increasing with d
         if ret.item() == 0:
@@ -137,6 +143,81 @@ def save_data(data_dir_load,files,u,u_prime,y):
     with open(data_dir_load + '/' + files, 'rb') as handle:
         pickle.dump({ 'X':u,'X_prime':u_prime,'Y':y}, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+class train_krr_simple():
+    def __init__(self, train_params, device='cuda:0'):
+        self.device=device
+        self.dataset_string = train_params['dataset']
+        self.fold = train_params['fold']
+        self.epochs=train_params['epochs']
+        self.double_up = train_params['double_up']
+        self.patience=train_params['patience']
+        self.model_string = train_params['model_string']
+        self.bs = train_params['bs']
+        self.save_dir = f'{self.dataset_string}_results/{self.model_string}/'
+        self.m=train_params['m_factor']
+        self.seed = train_params['seed']
+        self.folds = train_params['folds']
+        self.load_and_split_data()
+        self.init_model()
+
+    def init_model(self):
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        self.model = SGD_KRR_base
+
+    def load_and_split_data(self):
+        r=np.load(self.dataset_string+'/X.npy',allow_pickle=True)
+        y=np.load(self.dataset_string+'/y.npy',allow_pickle=True)
+        indices = np.arange(y.shape[0])
+        tr_ind,val_ind,test_ind = StratifiedKFold3(n_splits=self.folds,shuffle=True,random_state=self.seed).split(indices,y)[self.fold]
+        # test_set = np.concatenate([val_ind,test_ind],axis=0)
+        self.scaler=StandardScaler()
+        self.right_tr=self.scaler.fit_transform(r[tr_ind])
+        self.right_val = self.scaler.transform(r[val_ind])
+        self.right_test =self.scaler.transform(r[test_ind])
+
+        self.y_tr = y[tr_ind]
+        self.y_val = y[val_ind]
+        self.y_test = y[test_ind]
+
+        self.X_tr = self.right_tr
+        self.X_val = self.right_val
+        self.X_test = self.right_test
+
+        self.dataset=general_dataset(X_tr=self.X_tr,y_tr=self.y_tr,X_val=self.X_val,y_val=self.y_val,X_test=self.X_test,y_test=self.y_test)
+        self.dataset.set('train')
+        self.dataloader= custom_dataloader(self.dataset,batch_size=self.bs)
+
+        self.tr_ind = tr_ind
+        self.val_ind = val_ind
+        self.test_ind = test_ind
+
+
+    def SGD_krr_loop(self):
+        train_X=self.dataloader.dataset.train_X
+        train_y=self.dataloader.dataset.train_y
+        val_X=self.dataloader.dataset.val_X
+        val_y=self.dataloader.dataset.val_y
+        test_X=self.dataloader.dataset.test_X
+        test_y=self.dataloader.dataset.test_y
+        inp = get_median_ls(train_X)
+
+        best_model,best_tr,best_val,best_test = self.model(train_X, train_y, val_X, val_y, test_X, test_y, inp, 1e-5,self.m)
+        alpha = best_model.get_alpha()
+        results = {'model':best_model,
+            'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
+                   'ls': best_model.kernel.sigma.detach().cpu(),
+                   'lamb':best_model.penalty.detach().cpu(),
+                   'alpha':alpha.cpu(),
+                   'inducing_points':best_model.centers.detach().cpu()}
+        return results
+
+    def train_model(self):
+        results = self.SGD_krr_loop()
+        model_copy = dill.dumps(results)
+        pickle.dump(model_copy,
+                    open(self.save_dir + f'run_{self.fold}.pickle',
+                         "wb"))
 class train_GP():
     def __init__(self, train_params, device='cuda:0'):
         self.device=device
@@ -165,7 +246,8 @@ class train_GP():
             self.model = SGD_UKRR_PGP
         if self.model_string=='SGD_krr_pgp':
             self.model = SGD_KRR_PGP
-
+        if self.model_string=='SGD_base':
+            self.model = SGD_KRR_base
 
     def load_and_split_data(self):
         l_load=np.load(self.dataset_string+'/l_processed.npy',allow_pickle=True)
@@ -267,19 +349,18 @@ class train_GP():
         else:
             results = {'model':best_model,
                 'test_auc':best_test ,'val_auc':best_val,'tr_auc':best_tr,
-                       'ls':best_model.kernel.lengthscale.detach().cpu(),
+                       'ls': best_model.kernel.sigma.detach().cpu() if self.model_string=='SGD_base' else best_model.kernel.lengthscale.detach().cpu(),
                        'lamb':best_model.penalty.detach().cpu(),
                        'alpha':alpha.cpu(),
                        'inducing_points':best_model.centers.detach().cpu()}
         return results
 
     def train_model(self):
-        if self.model_string in ['SGD_krr_pgp','SGD_krr','SGD_ukrr','SGD_ukrr_pgp']:
-            results = self.SGD_krr_loop()
-            model_copy = dill.dumps(results)
-            pickle.dump(model_copy,
-                        open(self.save_dir + f'run_{self.fold}.pickle',
-                             "wb"))
+        results = self.SGD_krr_loop()
+        model_copy = dill.dumps(results)
+        pickle.dump(model_copy,
+                    open(self.save_dir + f'run_{self.fold}.pickle',
+                         "wb"))
 
 
 

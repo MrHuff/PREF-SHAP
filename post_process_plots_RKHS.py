@@ -3,7 +3,7 @@ import os.path
 import numpy as np
 import pandas as pd
 import seaborn as sns
-sns.set()
+# sns.set()
 import shap
 import matplotlib.pyplot as plt
 plt.rcParams.update({'font.size': 50})
@@ -61,13 +61,10 @@ def filter_out_names(cols,dataset):
     return cols
 def filter_type(df,data,d):
     columns = df['d'].unique().tolist()
-
-    mask = (df['d']==columns[d[0]])
-    for d_in in d[1:]:
-        mask = mask | (df['d']==columns[d_in])
+    mask = (df['d']==columns[d[0]]) |  (df['d']==columns[d[1]])
     df_subset = df[mask]
 
-    data_subset = data.iloc[:,d+[-1]]
+    data_subset = data.iloc[:,[d[0],d[1],-1]]
 
 
     return df_subset,data_subset
@@ -98,11 +95,11 @@ def produce_plots_pokemon_local(dirname,data_name,fn,d,max_disp=7):
         feature_cols = filter_out_names(cols,ds_nam)
         shap_values = shap.Explanation(values=vals, feature_names=feature_cols, data=data[cols].values)
         fig = plt.gcf()
-        shap.summary_plot(shap_values,max_display=max_disp,color_bar_label=r"$x_{winner}-x_{loser}$")
+        shap.plots.beeswarm(shap_values,max_display=max_disp,show=False, color_bar=False)
         fig.savefig(f'{savedir}/bee_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
         fig = plt.gcf()
-        shap.plots.bar(shap_values,max_display=max_disp+1)
+        shap.plots.bar(shap_values,max_display=max_disp+1,show=False)
         fig.savefig(f'{savedir}/bar_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
     # vars_data = []
@@ -133,11 +130,13 @@ def produce_plots(dirname,data_name,fn,max_disp=7):
         feature_cols = filter_out_names(cols,ds_nam)
         shap_values = shap.Explanation(values=vals, feature_names=feature_cols, data=data[cols].values)
         fig = plt.gcf()
-        shap.summary_plot(shap_values,max_display=max_disp,color_bar_label=r"$x_{winner}-x_{loser}$")
+        shap.plots.beeswarm(shap_values,max_display=max_disp,show=False, color_bar=False)
+        plt.xlabel("RKHS-SHAP values \n Impact on winning probability")
         fig.savefig(f'{savedir}/bee_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
         fig = plt.gcf()
-        shap.plots.bar(shap_values,max_display=max_disp+1)
+        shap.plots.bar(shap_values,max_display=max_disp+1,show=False,)
+        plt.xlabel("mean(|RKHS-SHAP values|) \n Impact on winning probability")
         fig.savefig(f'{savedir}/bar_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
     # vars_data = []
@@ -149,83 +148,8 @@ def produce_plots(dirname,data_name,fn,max_disp=7):
 
 
 if __name__ == '__main__':
-    # for model in ['SGD_krr','SGD_krr_pgp']:
-    #     for d in [[0, 0], [0, 1], [1, 1], [1, 2],[0, 2]]:
-    #         # for dirname in [f'local_alan_data_5000_100_{d}_{model}']:
-    #         for dirname in [f'local_alan_data_5000_1000_{d}_{model}']:
-    #             fns = [f'lasso']
-    #             data_name = 'data_folds'
-    #             for fn in fns:
-    #                 produce_plots(dirname,data_name,fn,9)
-    # for model in ['SGD_krr','SGD_krr_pgp']:
-    #     for d in [[0, 0], [0, 1], [1, 1], [1, 2],[0, 2]]:
-    #         for dirname in [f'local_alan_data_5000_100_{d}_{model}']:
-    #     # for dirname in [f'local_pokemon_wl_pokemon_squirtle_wl_{model}']:
-    #             fns = [f'lasso']
-    #             data_name = 'data_folds'
-    #             for fn in fns:
-    #                 produce_plots(dirname,data_name,fn,25)
-
-
-    for model in ['SGD_krr','SGD_krr_pgp']:
-        # for d in [[13, 24], [17, 10], [12, 19], [16, 13], [10, 14]]:  # ,[18,9],[18,14]]:
-        for d in [[13, 24,15,12,9]]:  # ,[18,9],[18,14]]:
-            for dirname in [f'local_pokemon_wl_{d}_{model}']:
-                fns = [f'lasso']
-                data_name = 'data_folds'
-                for fn in fns:
-                    produce_plots_pokemon_local(dirname,data_name,fn,d,10)
-    # for f in [0,1,2,3,4]:
-    #     for dirname in [f'{f}_False_chameleon_wl_SGD_krr',f'{f}_False_chameleon_wl_SGD_krr_pgp']:
-    #         # fns = [f'elastic',f'lasso',f'ridge']
-    #         fns = [f'lasso']
-    #         data_name = 'data_folds'
-    #         for fn in fns:
-    #             produce_plots(dirname,data_name,fn,max_disp=10)
-
-
-    # # for dirname in [ 'False_alan_data_5000_100_SGD_krr','False_alan_data_5000_100_SGD_krr_pgp']:
-    #     # fns = [f'elastic',f'lasso',f'ridge']
-    #     fns = [f'lasso']
-    #     data_name = 'data_folds'
-    #     for fn in fns:
-    #         produce_plots(dirname,data_name,fn,max_disp=10)
-    # #
-    # for dirname in [ 'False_toy_data_5000_10_2_SGD_krr','False_toy_data_5000_10_2_SGD_krr_pgp']:
-    #     # fns = [f'elastic',f'lasso',f'ridge']
-    #     fns = [f'lasso']
-    #     data_name = 'data_folds'
-    #     for fn in fns:
-    #         produce_plots(dirname,data_name,fn,max_disp=10)
-
-    # for dirname in ['False_chameleon_wl','False_pokemon_wl','False_chameleon_wl_SGD_krr_pgp','False_pokemon_wl_SGD_krr_pgp']:
-    #     # fns = [f'elastic',f'lasso',f'ridge']
-    #     fns = [f'lasso']
-    #     data_name = 'data_folds'
-    #     for fn in fns:
-    #         produce_plots(dirname,data_name,fn,max_disp=10)
-
-
-    # for dirname in ['False_chameleon_wl_SGD_base','False_alan_data_5000_100_SGD_base','False_pokemon_wl_SGD_base','False_chameleon_wl_SGD_krr','False_alan_data_5000_100_SGD_krr','False_pokemon_wl_SGD_krr']:
-    # for dirname in ['False_alan_data_5000_100_SGD_base']:
-    #     fns = [f'lasso']
-    #     data_name = 'data_folds'
-    #     for fn in fns:
-    #         produce_plots(dirname,data_name,fn,9)
-    #
-    # for ds,m in zip(['website_user_data_wl','tennis_data_processed_wl'],[5,6]):
-    #     dirname = f'False_{ds}'
-    #     for i,user in zip([2,1],['','_user']):
-    #         fns = [f'lasso_{i}']
-    #         data_name = 'data_folds' + user
-    #         for fn in fns:
-    #             produce_plots(dirname,data_name,fn,max_disp=m)
-    #
-    # p_id='d643'
-    # for ds,m in zip(['tennis_data_processed_wl'],[6]):
-    #     dirname = f'local_{p_id}_{ds}'
-    #     for i,user in zip([2,1],['','_user']):
-    #         fns = [f'lasso_{i}']
-    #         data_name = 'data_folds' + user
-    #         for fn in fns:
-    #             produce_plots(dirname,data_name,fn,max_disp=m)
+    for dirname in ['False_LOL_SGD_base']:#,'False_LOL_SGD_base']:
+        fns = [f'lasso']
+        data_name = 'data_folds'
+        for fn in fns:
+            produce_plots(dirname,data_name,fn,50)
