@@ -117,3 +117,4 @@ if __name__ == '__main__':
         np.save(f, X)
     with open(f'{fn}/y.npy', 'wb') as f:
         np.save(f, y)
+

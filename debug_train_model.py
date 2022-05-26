@@ -54,10 +54,10 @@ if __name__ == '__main__':
     # for ds in [['hard_data_10000_1000_5_3',2.0],['alan_data_5000_1000_10_10',2.0],['toy_data_5000_10_2',2.0]]:
     # for ds in [['hard_data_10000_1000_10_5',10.0]]:
     # for ds in [['alan_data_5000_1000_10_10',1.0],['toy_data_5000_10_2',1.0]]:
-    for ds in [['pokemon_wl',1.0]]:
+    for ds in [['alan_data_5000_100',2.0]]:
         for method in ['SGD_base']:
-            # for f in [0,1,2]:
-            for f in [0]:
+            for f in [0,1,2]:
+            # for f in [0]:
                 train_params['dataset']=ds[0]
                 train_params['model_string']=method
                 train_params['fold']=f

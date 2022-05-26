@@ -137,13 +137,13 @@ def produce_plots(dirname,data_name,fn,max_disp=7):
         fig = plt.gcf()
         # shap.summary_plot(shap_values,max_display=max_disp,show=False,color_bar_label=r"$x_{winner}-x_{loser}$")
         shap.summary_plot(shap_values,max_display=max_disp,show=False)
-        plt.xlabel("Pref-SHAP values \n Impact on preference")
+        # plt.xlabel("Pref-SHAP values \n Impact on preference")
 
         fig.savefig(f'{savedir}/bee_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
         fig = plt.gcf()
         shap.plots.bar(shap_values,max_display=max_disp+1,show=False)
-        plt.xlabel("mean(|Pref-SHAP values|) \n Impact on preference")
+        # plt.xlabel("mean(|Pref-SHAP values|) \n Impact on preference")
 
         fig.savefig(f'{savedir}/bar_plot_lamb={lamb}_{fn}.png', bbox_inches='tight')
         plt.clf()
@@ -217,8 +217,8 @@ if __name__ == '__main__':
     #         produce_plots(dirname,data_name,fn,max_disp=10)
 
 
-    for dirname in ['False_alan_data_5000_100_SGD_base','False_pokemon_wl_SGD_base','False_chameleon_wl_SGD_krr','False_alan_data_5000_100_SGD_krr','False_pokemon_wl_SGD_krr']:
-    # for dirname in ['False_alan_data_5000_100_SGD_base']:
+    # for dirname in ['False_alan_data_5000_100_SGD_base','False_pokemon_wl_SGD_base','False_chameleon_wl_SGD_krr','False_alan_data_5000_100_SGD_krr','False_pokemon_wl_SGD_krr']:
+    for dirname in ['False_alan_data_5000_100_SGD_base_addition','False_alan_data_5000_100_SGD_base_subtract']:
         fns = [f'lasso']
         data_name = 'data_folds'
         for fn in fns:

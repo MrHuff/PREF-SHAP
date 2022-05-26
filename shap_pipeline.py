@@ -105,21 +105,23 @@ def get_shapley_vals(job,model_string,fold,train_params,num_matches,post_method,
         cooking_dict = {'Y': Y_target.cpu(), 'weights': weights.cpu(), 'Z': Z.cpu(),
                         'n': x.shape[0]}
         sum_count, features_names, do_sum, coeffs = return_feature_names(job)
-        if do_sum:
-            chunk_l,chunk_r = torch.chunk(x,dim=1,chunks=2)
-            data_l = cumsum_thingy_2(sum_count, chunk_l)
-            data_r = cumsum_thingy_2(sum_count, chunk_r)
-            data = torch.cat([data_l,data_r],dim=1)
-        else:
-            data=x
-        # chunk_l, chunk_r = torch.chunk(x, dim=1, chunks=2)
         # if do_sum:
-        #     chunk_l = cumsum_thingy_2(sum_count, chunk_l)
-        #     chunk_r = cumsum_thingy_2(sum_count, chunk_r)
+        #     chunk_l,chunk_r = torch.chunk(x,dim=1,chunks=2)
+        #     data_l = cumsum_thingy_2(sum_count, chunk_l)
+        #     data_r = cumsum_thingy_2(sum_count, chunk_r)
+        #     data = torch.cat([data_l,data_r],dim=1)
+        # else:
+        #     data=x
+        # cols =[f'{g} (l)' for g in features_names]+[f'{g} (r)' for g in features_names]
+        # df = pd.DataFrame(data.numpy(), columns=cols)
+        chunk_l, chunk_r = torch.chunk(x, dim=1, chunks=2)
+        if do_sum:
+            chunk_l = cumsum_thingy_2(sum_count, chunk_l)
+            chunk_r = cumsum_thingy_2(sum_count, chunk_r)
+        data = chunk_r+chunk_l #chunk_l+chunk_r
         # data = chunk_r-chunk_l #chunk_l+chunk_r
-        # df = pd.DataFrame(data.numpy(), columns=features_names )
-        cols =[f'{g} (l)' for g in features_names]+[f'{g} (r)' for g in features_names]
-        df = pd.DataFrame(data.numpy(), columns=cols)
+        print(features_names)
+        df = pd.DataFrame(data.numpy(), columns=features_names )
         df['fold'] = f
         return cooking_dict,df
     else:
@@ -158,9 +160,11 @@ def get_shapley_vals(job,model_string,fold,train_params,num_matches,post_method,
 def get_shapley_vals_2(cooking_dict,job,post_method,m='SGD_krr'):
     sum_count,features_names,do_sum,coeffs=return_feature_names(job)
     if m=='SGD_base':
-        features_names =[f'{g} (l)' for g in features_names]+[f'{g} (r)' for g in features_names]
-
-        # features_names = features_names + [f'{g}_' for g in features_names]
+        pass
+        # features_names =[f'{g} (l)' for g in features_names]+[f'{g} (r)' for g in features_names]
+        # features_names=features_names
+        # features_names = features_names + [f'{g}' for g in features_names]
+    print(features_names)
     outputs = construct_values(cooking_dict['Y'],cooking_dict['Z'],
                               cooking_dict['weights'],coeffs,post_method
                               )
@@ -172,11 +176,12 @@ def get_shapley_vals_2(cooking_dict,job,post_method,m='SGD_krr'):
             if do_sum:
                 p_output_u = cumsum_thingy(sum_count, o_u)
                 p_output_d = cumsum_thingy(sum_count, o_d)
-                # p_output = p_output_u+p_output_d
-
-                p_output = torch.cat([p_output_u, p_output_d], dim=0)
+                # p_output = p_output_d+p_output_u
+                p_output = p_output_d-p_output_u
+                # p_output = torch.cat([p_output_u, p_output_d], dim=0)
             else:
-                p_output = output
+                # p_output = o_d-o_u
+                p_output = o_d+o_u
         else:
             if do_sum:
                 p_output = cumsum_thingy(sum_count,output)
@@ -206,7 +211,7 @@ if __name__ == '__main__':
     # for job in ['pokemon_wl']:
     #     for f in [0,1,2,3,4]:
     #     for m in ['SGD_krr','SGD_krr_pgp']:
-        for m in ['SGD_krr','SGD_base']:
+        for m in ['SGD_base']:
             for f in [0]:
                 interventional=False
                 model=m
